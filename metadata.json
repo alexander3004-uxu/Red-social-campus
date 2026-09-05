@@ -1,0 +1,6 @@
+{
+  "name": "CampusLink",
+  "description": "Comunidad universitaria conectada: feed académico, salas de estudio pomodoro, marketplace estudiantil seguro y mensajería en tiempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

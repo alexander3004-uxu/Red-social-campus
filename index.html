@@ -9,14 +9,46 @@
     <meta property="og:description" content="Comunidad universitaria conectada: feed académico, salas de estudio pomodoro, marketplace estudiantil seguro y mensajería en tiempo real." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap" rel="stylesheet" />
+
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet" />
+
+    <style>
+      .material-symbols-outlined {
+        font-family: 'Material Symbols Outlined';
+        font-weight: normal;
+        font-style: normal;
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        display: inline-block;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
+        -webkit-font-feature-settings: 'liga';
+        -webkit-font-smoothing: antialiased;
+        visibility: hidden;
+      }
+
+      .fonts-loaded .material-symbols-outlined {
+        visibility: visible;
+      }
+    </style>
   </head>
+
   <body class="h-full bg-[#faf8ff] text-[#131b2e] antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <script>
+      document.fonts.ready.then(() => {
+        document.documentElement.classList.add('fonts-loaded');
+      });
+    </script>
   </body>
 </html>
-

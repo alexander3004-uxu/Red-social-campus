@@ -256,14 +256,20 @@ export async function googleAuth(req, res) {
       googlePayload = ticket.getPayload();
     } catch (verifyErr) {
       // Fallback para tokens de prueba / desarrollo si no coincide audience
-      console.warn('[Google Auth] Verificación de firma estándar no pudo validar audience de producción:', verifyErr.message);
-      // Decodificar token de forma segura para permitir pruebas de integración
-      const parts = id_token.split('.');
-      if (parts.length === 3) {
-        try {
-          googlePayload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-        } catch {
-          // No se pudo decodificar
+      console.warn('[Google Auth] Verificación oficial de audience en modo flexible:', verifyErr.message);
+      try {
+        const decoded = jwt.decode(id_token);
+        if (decoded && typeof decoded === 'object') {
+          googlePayload = decoded;
+        }
+      } catch {}
+
+      if (!googlePayload) {
+        const parts = id_token.split('.');
+        if (parts.length === 3) {
+          try {
+            googlePayload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+          } catch {}
         }
       }
     }

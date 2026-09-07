@@ -224,7 +224,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <img
               alt="CampusLink Logo"
               className="w-16 h-16 object-contain relative z-10 drop-shadow-md"
-              src="https://lh3.googleusercontent.com/aida/AEtjO1XlUgudA81nKpgNLwZ4M7FwTV-HruwUCA-f79CKUDtBrY9hd-jVF7qpDnLjBiWVcdye5M9qMk1qhyXr0zFX32De00-iYEfBbj1Jq_LFt9amW2gSalZ0IDsis2r1HYjXf9iRJusWofoEI-q9RMIp7iPhf6LVyf9GtVrg9UQerEAQH31ll4n_Z3s9eueJMN4AWxfIyK5fdUFMhWkPcvUp2Vx_iWJmxoPhZ8ZgQo2OQn3YvvUHsb6_BzGdN10"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6gRafboGZpiXWJibXgTkHN8n4OUwNAZsp9ORX6mac0-TU5lb8hEFJRtxOnZD_xwuY3cj-jsaXKYDgJ0sAfr1Y0po9uTKT7Bt-tX6YCtIFKeCru3NsyG6UMyVm2UYODTUoQb-zXQ4ftQsEP9FNGJyWhqoLp1s5qFzKQTer0hUvF3ugMMu98wt-HBWyvnPMfCFVc5aYMHT9jR_n9X49l2_Su9FRyQNh1n6PE3Wt7id5XPz1FNkuYZbL"
             />
           </div>
           <h1 className="text-[26px] font-bold text-[#131b2e] tracking-tight">

@@ -7,19 +7,31 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import crypto from 'crypto';
 
-// Directorio destino para avatares
-const UPLOAD_DIR = path.resolve(process.cwd(), 'uploads', 'avatars');
+// Directorio destino para avatares (usa os.tmpdir() si está en Vercel/serverless)
+const UPLOAD_DIR = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'uploads', 'avatars')
+  : path.resolve(process.cwd(), 'uploads', 'avatars');
 
-// Asegurar existencia de la carpeta de uploads
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// Asegurar existencia de la carpeta de uploads con manejo de permisos
+try {
+  if (!fs.existsSync(UPLOAD_DIR)) {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn('[Multer] Advertencia al crear directorio de almacenamiento:', err.message);
 }
 
 // Configuración de almacenamiento en disco
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
+    try {
+      if (!fs.existsSync(UPLOAD_DIR)) {
+        fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      }
+    } catch {}
     cb(null, UPLOAD_DIR);
   },
   filename: (_req, file, cb) => {

@@ -43,6 +43,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isGuest: boolean;
   isLoading: boolean;
+  isInitialLoading: boolean;
   guestSessionId: string | null;
   // Modal de upgrade para invitados
   isUpgradeModalOpen: boolean;
@@ -69,7 +70,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [token, setToken] = useState<string | null>(() => apiClient.getToken());
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [guestSessionId, setGuestSessionId] = useState<string | null>(() => {
     try {
       return localStorage.getItem('campus_guest_session_id');
@@ -105,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Inicialización: verificar si hay sesión activa al recargar la aplicación
+   * Inicialización: verificar si hay sesión activa al cargar la aplicación
    */
   useEffect(() => {
     let isMounted = true;
@@ -114,12 +116,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const storedToken = apiClient.getToken();
         if (!storedToken) {
-          setIsLoading(false);
+          if (isMounted) setIsInitialLoading(false);
           return;
         }
 
         const data = await apiClient.auth.getMe();
-        if (isMounted && data.success) {
+        if (isMounted && data && data.success) {
           setUser(data.user);
           setProfile(data.profile);
           setToken(storedToken);
@@ -137,7 +139,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } finally {
         if (isMounted) {
-          setIsLoading(false);
+          setIsInitialLoading(false);
         }
       }
     }
@@ -155,7 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await apiClient.auth.login({ email, password, rememberMe });
-      if (res.success) {
+      if (res && res.success) {
         apiClient.setToken(res.token);
         setToken(res.token);
         setUser(res.user);
@@ -182,7 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         guestSessionId: guestSessionId || undefined,
       };
       const res = await apiClient.auth.register(payload);
-      if (res.success) {
+      if (res && res.success) {
         apiClient.setToken(res.token);
         setToken(res.token);
         setUser(res.user);
@@ -208,7 +210,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id_token: idToken,
         guestSessionId: guestSessionId || undefined,
       });
-      if (res.success) {
+      if (res && res.success) {
         apiClient.setToken(res.token);
         setToken(res.token);
         setUser(res.user);
@@ -232,14 +234,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await apiClient.auth.guest();
-      if (res.success) {
+      if (res && res.success) {
         apiClient.setToken(res.token);
         setToken(res.token);
         setUser(res.user);
         setProfile(res.profile);
-        setGuestSessionId(res.guestSessionId);
+        setGuestSessionId(res.guestSessionId || res.user.id);
         try {
-          localStorage.setItem('campus_guest_session_id', res.guestSessionId);
+          localStorage.setItem('campus_guest_session_id', res.guestSessionId || res.user.id);
         } catch {}
       }
       return res;
@@ -249,14 +251,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Cierre de Sesión
+   * Cerrar Sesión
    */
   const logout = async () => {
-    setIsLoading(true);
     try {
       await apiClient.auth.logout();
     } catch {
-      // Continuar limpieza local incluso si hay fallo de red
+      // Ignorar errores de red en logout
     } finally {
       apiClient.setToken(null);
       setUser(null);
@@ -264,46 +265,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(null);
       setGuestSessionId(null);
       try {
-        localStorage.removeItem('campus_access_token');
         localStorage.removeItem('campus_guest_session_id');
+        localStorage.removeItem('campuslink_active_session');
       } catch {}
-      setIsLoading(false);
     }
   };
 
   /**
-   * Actualizar Perfil
+   * Actualizar Perfil de Usuario
    */
-  const updateProfile = async (patchData: Partial<UserProfile>) => {
+  const updateProfile = async (patchData: Partial<UserProfile>): Promise<UserProfile> => {
     const res = await apiClient.users.updateProfile(patchData);
-    if (res.success && res.profile) {
+    if (res && res.success && res.profile) {
       setProfile(res.profile);
       return res.profile;
     }
-    throw new Error(res.message || 'Error actualizando perfil');
+    throw new Error(res?.message || 'Error al actualizar perfil');
   };
 
   /**
-   * Subida de Avatar
+   * Subir Avatar
    */
-  const uploadAvatar = async (file: File) => {
+  const uploadAvatar = async (file: File): Promise<string> => {
     const res = await apiClient.users.uploadAvatar(file);
-    if (res.success && res.avatar_url) {
+    if (res && res.success && res.avatar_url) {
       setProfile((prev) => (prev ? { ...prev, avatar_url: res.avatar_url } : null));
       return res.avatar_url;
     }
-    throw new Error(res.message || 'Error subiendo foto de perfil');
+    throw new Error(res?.message || 'Error al subir avatar');
   };
 
   /**
-   * Cambio de Contraseña
+   * Cambiar Contraseña Segura
    */
   const changePassword = async (currentPassword: string, newPassword: string) => {
     return apiClient.users.changePassword({ currentPassword, newPassword });
   };
 
+  const isAuthenticated = Boolean(user && token);
   const isGuest = Boolean(user?.role === 'guest' || user?.isGuest);
-  const isAuthenticated = Boolean(user !== null);
   const role = user?.role || null;
 
   return (
@@ -316,6 +316,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated,
         isGuest,
         isLoading,
+        isInitialLoading,
         guestSessionId,
         isUpgradeModalOpen,
         upgradeModalFeature,
@@ -340,7 +341,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth debe ser utilizado dentro de un <AuthProvider>');
+    throw new Error('useAuth debe ser utilizado dentro de un AuthProvider');
   }
   return context;
 };

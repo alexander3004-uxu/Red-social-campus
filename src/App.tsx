@@ -41,7 +41,7 @@ function CampusApp() {
     token,
     isAuthenticated,
     isGuest,
-    isLoading,
+    isInitialLoading,
     isUpgradeModalOpen,
     upgradeModalFeature,
     closeUpgradeModal,
@@ -353,7 +353,7 @@ function CampusApp() {
   };
 
   // Estado de carga inicial mientras se valida token / cookies
-  if (isLoading) {
+  if (isInitialLoading) {
     return (
       <div className="min-h-screen bg-[#faf8ff] flex flex-col items-center justify-center">
         <div className="w-10 h-10 border-4 border-[#3525cd]/20 border-t-[#3525cd] rounded-full animate-spin mb-3" />

@@ -221,11 +221,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         <div className="flex flex-col items-center text-center pt-2">
           <div className="relative w-20 h-20 mb-2 flex items-center justify-center">
             <div className="absolute inset-0 bg-[#4f46e5]/15 rounded-full blur-xl transform scale-110 animate-pulse" />
-            <img
-              alt="CampusLink Logo"
-              className="w-16 h-16 object-contain relative z-10 drop-shadow-md"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6gRafboGZpiXWJibXgTkHN8n4OUwNAZsp9ORX6mac0-TU5lb8hEFJRtxOnZD_xwuY3cj-jsaXKYDgJ0sAfr1Y0po9uTKT7Bt-tX6YCtIFKeCru3NsyG6UMyVm2UYODTUoQb-zXQ4ftQsEP9FNGJyWhqoLp1s5qFzKQTer0hUvF3ugMMu98wt-HBWyvnPMfCFVc5aYMHT9jR_n9X49l2_Su9FRyQNh1n6PE3Wt7id5XPz1FNkuYZbL"
-            />
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#3525cd] via-[#4f46e5] to-[#712ae2] flex items-center justify-center relative z-10 shadow-lg shadow-[#3525cd]/25 border border-white/20">
+              <span className="material-symbols-outlined text-white text-3xl">school</span>
+            </div>
           </div>
           <h1 className="text-[26px] font-bold text-[#131b2e] tracking-tight">
             Red Social{' '}

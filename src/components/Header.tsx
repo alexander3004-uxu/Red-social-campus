@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ScreenTab } from '../types';
 import { CURRENT_USER } from '../data/mockData';
 
@@ -26,7 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   ];
 
   return (
-    <header className="fixed top-0 inset-x-0 z-50 bg-[#faf8ff]/90 backdrop-blur-xl shadow-[0_1px_12px_rgba(19,27,46,0.04)] border-b border-[#eaedff]">
+    <header className="fixed top-0 inset-x-0 z-50 bg-[#faf8ff]/95 backdrop-blur-xl shadow-[0_1px_12px_rgba(19,27,46,0.04)] border-b border-[#eaedff] pt-[env(safe-area-inset-top,0px)]">
       <div className="max-w-7xl mx-auto h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
         {/* Brand */}
         <div className="flex items-center gap-2.5 min-w-0">

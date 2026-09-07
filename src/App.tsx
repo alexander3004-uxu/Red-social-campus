@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ScreenTab, Post, Story, MarketItem, LiveRoom, CommunityGroup, ChatThread } from './types';
 import {
   INITIAL_POSTS,
@@ -29,6 +29,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { DesktopLeftSidebar } from './components/DesktopLeftSidebar';
 import { DesktopRightSidebar } from './components/DesktopRightSidebar';
 import { UniversitySelectModal } from './components/UniversitySelectModal';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 
 export default function App() {
   // Current Active Screen
@@ -97,6 +98,25 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  // Handle Manifest Shortcut Actions (e.g. ?action=create_post)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    if (action) {
+      if (action === 'create_post') {
+        setCurrentTab('feed');
+        setCreatePostModal({ isOpen: true, type: 'text' });
+      } else if (action === 'messages') {
+        setCurrentTab('mensajes');
+      } else if (action === 'market') {
+        setCurrentTab('market');
+      } else if (action === 'carnet') {
+        setCurrentTab('feed');
+        setIsCarnetOpen(true);
+      }
+    }
+  }, []);
 
   // Interactions: Feed
   const handleToggleLike = (postId: string) => {
@@ -317,7 +337,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] font-sans antialiased selection:bg-[#3525cd]/20 selection:text-[#3525cd]">
+    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] font-sans antialiased selection:bg-[#3525cd]/20 selection:text-[#3525cd] pb-16 md:pb-0">
+      {/* PWA Custom Install Prompt Banner & Network Status */}
+      <PWAInstallPrompt />
+
       {/* Global Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#131b2e] text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-2">

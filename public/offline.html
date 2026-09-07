@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>CampusLink - Sin Conexión</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #3525cd;
+      --surface: #faf8ff;
+      --text: #131b2e;
+      --text-muted: #464555;
+      --tertiary: #006e4b;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: var(--surface);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      justify-content: center;
+      align-items: center;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #eaedff;
+      border-radius: 1.5rem;
+      padding: 2rem 1.5rem;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 10px 30px rgba(19, 27, 46, 0.05);
+      display: flex;
+      flex-direction: flex-col;
+      align-items: center;
+      gap: 1.25rem;
+    }
+    .icon-wrapper {
+      width: 72px;
+      height: 72px;
+      background: #f2f3ff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+    }
+    .icon-wrapper svg {
+      width: 36px;
+      height: 36px;
+      fill: currentColor;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: #ffdad6;
+      color: #93000a;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+    }
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.2;
+    }
+    p {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .btn {
+      width: 100%;
+      padding: 0.85rem 1.25rem;
+      background: var(--primary);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 0.875rem;
+      border: none;
+      border-radius: 1rem;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      margin-top: 0.5rem;
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+    .features {
+      text-align: left;
+      width: 100%;
+      background: #faf8ff;
+      padding: 1rem;
+      border-radius: 1rem;
+      border: 1px border #e2e7ff;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .features ul {
+      list-style-type: none;
+      margin-top: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .features li {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .features li::before {
+      content: "✓";
+      color: var(--tertiary);
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon-wrapper">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L3.5 19.08l1.41 1.41 1.57-1.57C8.03 20.26 9.98 21 12 21c4.97 0 9-4.03 9-9 0-2.12-.74-4.07-1.97-5.61l1.47-1.47-1.41-1.41-1.57 1.57C15.97 3.74 14.02 3 12 3zm0 2c3.86 0 7 3.14 7 7 0 1.55-.51 2.98-1.37 4.14l-9.77-9.77C9.02 5.51 10.45 5 12 5zm-5.63 2.86l9.77 9.77C14.98 18.49 13.55 19 12 19c-3.86 0-7-3.14-7-7 0-1.55.51-2.98 1.37-4.14z"/>
+      </svg>
+    </div>
+
+    <span class="badge">
+      Modo Sin Conexión
+    </span>
+
+    <h1>Estás sin conexión a internet</h1>
+
+    <p>
+      No te preocupes, CampusLink guarda en caché tus publicaciones y datos para que puedas seguir navegando por la app.
+    </p>
+
+    <div class="features">
+      <strong>Mientras recuperas señal puedes:</strong>
+      <ul>
+        <li>Revisar tu Carnet Digital Universitario</li>
+        <li>Consultar tus publicaciones e información guardada</li>
+        <li>Preparar nuevos posts para subir al reconectarte</li>
+      </ul>
+    </div>
+
+    <button class="btn" onclick="window.location.reload()">
+      Reintentar conexión
+    </button>
+  </div>
+
+  <script>
+    // Auto-reload when network status returns
+    window.addEventListener('online', function() {
+      window.location.reload();
+    });
+  </script>
+</body>
+</html>

@@ -54,7 +54,7 @@ export const UniversitySelectModal: React.FC<UniversitySelectModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl border border-[#eaedff] flex flex-col relative animate-in fade-in zoom-in-95 duration-200">
         {/* Header decoration */}
         <div className="bg-gradient-to-r from-[#3525cd] via-[#4f46e5] to-[#712ae2] p-5 text-white flex flex-col gap-1 text-center items-center">

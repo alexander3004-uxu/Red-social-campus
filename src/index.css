@@ -69,11 +69,40 @@
 }
 
 @layer base {
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
   body {
     font-family: var(--font-sans);
-    overscroll-behavior-y: none;
+    overscroll-behavior-y: contain;
     -webkit-tap-highlight-color: transparent;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+}
+
+/* Safe Area Inset Helpers */
+.pt-safe {
+  padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+}
+
+.pb-safe {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-nav-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  height: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
+.header-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+  height: calc(4rem + env(safe-area-inset-top, 0px));
 }
 
 /* Material symbols adjustments */
@@ -99,4 +128,12 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* PWA Standalone Mode specific tweaks */
+@media all and (display-mode: standalone) {
+  /* Hide unnecessary native browser artifacts or add custom header spacing */
+  header.fixed {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
 }

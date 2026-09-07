@@ -16,7 +16,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   if (currentTab === 'login') return null;
 
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#faf8ff]/90 backdrop-blur-xl shadow-[0_-4px_20px_rgba(19,27,46,0.06)] border-t border-[#eaedff]">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#faf8ff]/95 backdrop-blur-xl shadow-[0_-4px_20px_rgba(19,27,46,0.06)] border-t border-[#eaedff] pb-[env(safe-area-inset-bottom,0px)]">
       <div className="max-w-md mx-auto flex justify-around items-center h-16 px-2">
         {/* Feed Tab */}
         <button

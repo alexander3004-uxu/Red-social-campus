@@ -9,6 +9,11 @@ interface DesktopLeftSidebarProps {
   onOpenCarnet: () => void;
   onOpenCreatePost: () => void;
   selectedCampus?: string;
+  userAvatar?: string;
+  userName?: string;
+  userCareer?: string;
+  isGuest?: boolean;
+  onOpenUpgrade?: () => void;
 }
 
 export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
@@ -18,6 +23,11 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
   onOpenCarnet,
   onOpenCreatePost,
   selectedCampus,
+  userAvatar,
+  userName,
+  userCareer,
+  isGuest,
+  onOpenUpgrade,
 }) => {
   const navItems: { id: ScreenTab; label: string; icon: string; badge?: number }[] = [
     { id: 'feed', label: 'Feed del Campus', icon: 'home' },
@@ -34,29 +44,48 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
         <div className="flex items-center gap-3">
           <div className="relative">
             <img
-              src={CURRENT_USER.avatar}
-              alt={CURRENT_USER.name}
+              src={userAvatar || CURRENT_USER.avatar}
+              alt={userName || CURRENT_USER.name}
               className="w-12 h-12 rounded-full object-cover ring-2 ring-[#3525cd]/20"
             />
-            <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-[#006e4b] ring-2 ring-white" title="En línea en el campus"></span>
+            <span
+              className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full ring-2 ring-white ${
+                isGuest ? 'bg-amber-500' : 'bg-[#006e4b]'
+              }`}
+              title={isGuest ? 'Modo Invitado' : 'En línea en el campus'}
+            />
           </div>
           <div className="flex flex-col min-w-0">
-            <h3 className="text-sm font-bold text-[#131b2e] truncate">{CURRENT_USER.name}</h3>
-            <span className="text-[11px] text-[#464555] truncate">{CURRENT_USER.career}</span>
+            <h3 className="text-sm font-bold text-[#131b2e] truncate">
+              {userName || CURRENT_USER.name}
+            </h3>
+            <span className="text-[11px] text-[#464555] truncate">
+              {isGuest ? 'Modo Lectura (Invitado)' : (userCareer || CURRENT_USER.career)}
+            </span>
             <span className="text-[10px] text-[#3525cd] font-semibold truncate">
               {selectedCampus || CURRENT_USER.university}
             </span>
           </div>
         </div>
 
-        {/* Quick Carnet NFC Action */}
-        <button
-          onClick={onOpenCarnet}
-          className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-white text-xs font-bold flex items-center justify-center gap-2 hover:opacity-95 active:scale-98 transition-all shadow-sm"
-        >
-          <span className="material-symbols-outlined text-[18px]">badge</span>
-          <span>Ver Carnet Digital NFC</span>
-        </button>
+        {/* Action Button: Upgrade or Carnet */}
+        {isGuest ? (
+          <button
+            onClick={onOpenUpgrade}
+            className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-white text-xs font-bold flex items-center justify-center gap-2 hover:opacity-95 active:scale-98 transition-all shadow-sm"
+          >
+            <span className="material-symbols-outlined text-[18px]">how_to_reg</span>
+            <span>Crear Cuenta Estudiante</span>
+          </button>
+        ) : (
+          <button
+            onClick={onOpenCarnet}
+            className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-white text-xs font-bold flex items-center justify-center gap-2 hover:opacity-95 active:scale-98 transition-all shadow-sm"
+          >
+            <span className="material-symbols-outlined text-[18px]">badge</span>
+            <span>Ver Carnet Digital NFC</span>
+          </button>
+        )}
       </div>
 
       {/* Navigation List */}

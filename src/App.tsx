@@ -8,6 +8,7 @@ import {
   COMMUNITY_GROUPS,
   INITIAL_CHATS,
 } from './data/mockData';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { LoginScreen } from './components/LoginScreen';
@@ -29,16 +30,36 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { DesktopLeftSidebar } from './components/DesktopLeftSidebar';
 import { DesktopRightSidebar } from './components/DesktopRightSidebar';
 import { UniversitySelectModal } from './components/UniversitySelectModal';
+import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { socketClient } from './services/socketClient';
 
-export default function App() {
-  // Current Active Screen
+function CampusApp() {
+  const {
+    user,
+    profile,
+    token,
+    isAuthenticated,
+    isGuest,
+    isLoading,
+    isUpgradeModalOpen,
+    upgradeModalFeature,
+    closeUpgradeModal,
+    openUpgradeModal,
+    requireAuthAction,
+  } = useAuth();
+
+  // Pantalla activa actual
   const [currentTab, setCurrentTab] = useState<ScreenTab>('feed');
 
-  // University Selection (Asked only once, saved to profile & localStorage)
+  // Universidad seleccionada
   const [selectedCampus, setSelectedCampus] = useState<string>(() => {
     try {
-      return localStorage.getItem('campuslink_user_university') || 'Universidad Central (Sede Principal)';
+      return (
+        profile?.university ||
+        localStorage.getItem('campuslink_user_university') ||
+        'Universidad Central (Sede Principal)'
+      );
     } catch {
       return 'Universidad Central (Sede Principal)';
     }
@@ -46,7 +67,6 @@ export default function App() {
 
   const [showUniversitySelectModal, setShowUniversitySelectModal] = useState<boolean>(() => {
     try {
-      // If user has already confirmed, don't show the modal
       return !localStorage.getItem('campuslink_university_confirmed');
     } catch {
       return false;
@@ -64,6 +84,18 @@ export default function App() {
     setShowUniversitySelectModal(false);
     showToast(`¡${university} vinculada a tu perfil y carnet digital!`);
   };
+
+  // Conexión WebSockets cuando hay token y no es invitado
+  useEffect(() => {
+    if (token && !isGuest) {
+      const serverUrl = window.location.origin;
+      try {
+        socketClient.connect(serverUrl, token);
+      } catch (err) {
+        console.warn('[Socket] No se pudo inicializar cliente socket:', err);
+      }
+    }
+  }, [token, isGuest]);
 
   // App Data State
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
@@ -118,80 +150,88 @@ export default function App() {
     }
   }, []);
 
-  // Interactions: Feed
+  // Interacciones: Feed protegidas con guard de invitado
   const handleToggleLike = (postId: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          const isLiked = !p.isLiked;
-          return {
-            ...p,
-            isLiked,
-            likes: isLiked ? p.likes + 1 : p.likes - 1,
-          };
-        }
-        return p;
-      })
-    );
+    requireAuthAction(() => {
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id === postId) {
+            const isLiked = !p.isLiked;
+            return {
+              ...p,
+              isLiked,
+              likes: isLiked ? p.likes + 1 : p.likes - 1,
+            };
+          }
+          return p;
+        })
+      );
+    }, 'dar me gusta a publicaciones');
   };
 
   const handleToggleSave = (postId: string) => {
-    setPosts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, isSaved: !p.isSaved } : p))
-    );
-    showToast('Publicación guardada en tu perfil');
+    requireAuthAction(() => {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, isSaved: !p.isSaved } : p))
+      );
+      showToast('Publicación guardada en tu perfil');
+    }, 'guardar publicaciones en tu perfil');
   };
 
   const handleVotePoll = (postId: string, optionId: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId && p.poll) {
-          const alreadyVoted = p.poll.userVotedOption === optionId;
-          const updatedOptions = p.poll.options.map((opt) => {
-            if (opt.id === optionId) {
-              return { ...opt, votes: alreadyVoted ? opt.votes - 1 : opt.votes + 1 };
-            }
-            if (p.poll?.userVotedOption === opt.id) {
-              return { ...opt, votes: opt.votes - 1 };
-            }
-            return opt;
-          });
-          const totalVotes = updatedOptions.reduce((acc, curr) => acc + curr.votes, 0);
+    requireAuthAction(() => {
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id === postId && p.poll) {
+            const alreadyVoted = p.poll.userVotedOption === optionId;
+            const updatedOptions = p.poll.options.map((opt) => {
+              if (opt.id === optionId) {
+                return { ...opt, votes: alreadyVoted ? opt.votes - 1 : opt.votes + 1 };
+              }
+              if (p.poll?.userVotedOption === opt.id) {
+                return { ...opt, votes: opt.votes - 1 };
+              }
+              return opt;
+            });
+            const totalVotes = updatedOptions.reduce((acc, curr) => acc + curr.votes, 0);
 
-          return {
-            ...p,
-            poll: {
-              ...p.poll,
-              totalVotes,
-              userVotedOption: alreadyVoted ? undefined : optionId,
-              options: updatedOptions,
-            },
-          };
-        }
-        return p;
-      })
-    );
-    showToast('Tu voto ha sido registrado');
+            return {
+              ...p,
+              poll: {
+                ...p.poll,
+                totalVotes,
+                userVotedOption: alreadyVoted ? undefined : optionId,
+                options: updatedOptions,
+              },
+            };
+          }
+          return p;
+        })
+      );
+      showToast('Tu voto ha sido registrado');
+    }, 'votar en encuestas académicas');
   };
 
   const handleToggleEventRsvp = (postId: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId && p.event) {
-          const nextAttending = !p.event.isAttending;
-          return {
-            ...p,
-            event: {
-              ...p.event,
-              isAttending: nextAttending,
-              attendeesCount: nextAttending ? p.event.attendeesCount + 1 : p.event.attendeesCount - 1,
-            },
-          };
-        }
-        return p;
-      })
-    );
-    showToast('¡Asistencia confirmada para el evento del campus!');
+    requireAuthAction(() => {
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id === postId && p.event) {
+            const nextAttending = !p.event.isAttending;
+            return {
+              ...p,
+              event: {
+                ...p.event,
+                isAttending: nextAttending,
+                attendeesCount: nextAttending ? p.event.attendeesCount + 1 : p.event.attendeesCount - 1,
+              },
+            };
+          }
+          return p;
+        })
+      );
+      showToast('¡Asistencia confirmada para el evento del campus!');
+    }, 'confirmar asistencia a eventos del campus');
   };
 
   const handleOpenPdf = (title: string, content?: string) => {
@@ -204,155 +244,139 @@ export default function App() {
 
   const handleOpenStory = (story: Story) => {
     if (story.isAdd) {
-      setCreatePostModal({ isOpen: true, type: 'photo' });
+      requireAuthAction(() => {
+        setCreatePostModal({ isOpen: true, type: 'photo' });
+      }, 'subir una historia al campus');
     } else {
       setActiveStory(story);
       setIsStoryOpen(true);
     }
   };
 
-  // Interactions: Market
+  // Interacciones: Market
   const handleToggleMarketFav = (itemId: string) => {
-    setMarketItems((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, isFav: !item.isFav } : item))
-    );
+    requireAuthAction(() => {
+      setMarketItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, isFav: !item.isFav } : item))
+      );
+    }, 'guardar artículos favoritos');
   };
 
   const handleOpenChatWithSeller = (sellerName: string, productTitle: string, price: number) => {
-    // Check if chat thread exists or create new one
-    let targetChat = chats.find((c) => c.name.includes(sellerName.split(' ')[0]));
-    if (!targetChat) {
-      targetChat = {
-        id: `chat-${Date.now()}`,
-        name: sellerName,
-        avatar:
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuAtb9b4zzzvwKITUqbWGkuxZHLdxSLMk9_1yvlvYEhC8FX9ziGREf-YduFUkrzzaxB_QjX1RBt_CGqZBK2nnihbfqpmibOkDSsf_KtYrwFAvFPF_MYlcIwRQU4ntGCr0rjsS46MYEXjuMQhaYMBn0KotM7MXBem9f8viC68Q6ghZ7JVCXVQjMySjYsZGysPSV70oql8JLOgnp2VWsh4cs7Bbz7Cug-1VDP56ayBfPIseCXv2iKd_1c1',
-        isOnline: true,
-        category: 'market',
-        badge: 'Market',
-        badgeType: 'market',
-        productInfo: {
-          name: productTitle,
-          price,
-          icon: 'shopping_bag',
-        },
-        lastMessage: 'Hola, vi tu publicación en Campus Market. ¿Sigue disponible?',
-        time: 'Ahora',
-        messages: [
-          {
-            id: 'm-init',
-            sender: 'Sofía',
-            text: `Hola, me interesa tu publicación de "${productTitle}". ¿Nos podemos ver en el Hall de la biblioteca?`,
-            time: '12:00 PM',
-            isSender: true,
+    requireAuthAction(() => {
+      let targetChat = chats.find((c) => c.name.includes(sellerName.split(' ')[0]));
+      if (!targetChat) {
+        targetChat = {
+          id: `chat-${Date.now()}`,
+          name: sellerName,
+          avatar:
+            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+          isOnline: true,
+          category: 'market',
+          badge: 'Market',
+          badgeType: 'market',
+          productInfo: {
+            name: productTitle,
+            price,
+            icon: 'shopping_bag',
           },
-        ],
-      };
-      setChats((prev) => [targetChat!, ...prev]);
-    }
-    setActiveChat(targetChat);
-    setIsChatOpen(true);
+          lastMessage: 'Hola, vi tu publicación en Campus Market. ¿Sigue disponible?',
+          time: 'Ahora',
+          messages: [
+            {
+              id: 'm-init',
+              sender: 'me',
+              text: `Hola, me interesa tu publicación de "${productTitle}". ¿Nos podemos ver en el campus?`,
+              time: '12:00 PM',
+            },
+          ],
+        };
+        setChats([targetChat, ...chats]);
+      }
+      setActiveChat(targetChat);
+      setIsChatOpen(true);
+    }, 'chatear con el vendedor');
   };
 
-  // Interactions: Grupos
+  const handleSendMessage = (text: string) => {
+    requireAuthAction(() => {
+      if (!activeChat) return;
+      const newMessage = {
+        id: `msg-${Date.now()}`,
+        sender: 'me' as const,
+        text,
+        time: 'Ahora',
+      };
+      const updatedChat = {
+        ...activeChat,
+        lastMessage: text,
+        time: 'Ahora',
+        messages: [...activeChat.messages, newMessage],
+      };
+      setActiveChat(updatedChat);
+      setChats((prev) => prev.map((c) => (c.id === activeChat.id ? updatedChat : c)));
+    }, 'enviar mensajes en el chat');
+  };
+
   const handleToggleJoinGroup = (groupId: string) => {
-    setGroups((prev) =>
-      prev.map((g) => {
-        if (g.id === groupId) {
-          const next = !g.isJoined;
-          return {
-            ...g,
-            isJoined: next,
-            membersCount: next ? g.membersCount + 1 : g.membersCount - 1,
-          };
-        }
-        return g;
-      })
-    );
-    showToast('Membresía del grupo actualizada');
+    requireAuthAction(() => {
+      setGroups((prev) =>
+        prev.map((g) => {
+          if (g.id === groupId) {
+            const isJoined = !g.isJoined;
+            showToast(isJoined ? `¡Te uniste a ${g.title}!` : `Saliste de ${g.title}`);
+            return {
+              ...g,
+              isJoined,
+              membersCount: isJoined ? g.membersCount + 1 : g.membersCount - 1,
+            };
+          }
+          return g;
+        })
+      );
+    }, 'unirte a grupos de estudio');
   };
 
   const handleJoinLiveRoom = (room: LiveRoom) => {
-    setLiveRooms((prev) =>
-      prev.map((r) => (r.id === room.id ? { ...r, isConnected: true } : r))
-    );
-    setActiveLiveRoom(room);
+    requireAuthAction(() => {
+      setActiveLiveRoom(room);
+    }, 'ingresar a salas de estudio pomodoro');
   };
 
-  // Interactions: Chat messages
-  const handleSendMessage = (chatId: string, text: string) => {
-    const newMessage = {
-      id: `msg-${Date.now()}`,
-      sender: 'Sofía',
-      text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isSender: true,
-    };
-
-    setChats((prev) =>
-      prev.map((c) => {
-        if (c.id === chatId) {
-          return {
-            ...c,
-            lastMessage: text,
-            time: 'Ahora',
-            messages: [...c.messages, newMessage],
-          };
-        }
-        return c;
-      })
-    );
-
-    // Simulated reply after 1.2 seconds!
-    setTimeout(() => {
-      const replies = [
-        '¡Perfecto! Nos vemos en el punto seguro de la Biblioteca Central.',
-        'Excelente, llevo el carnet y el material listo.',
-        'Quedamos a esa hora, ¡muchas gracias!',
-        'Anotado. Ahí nos encontramos en la entrada principal.',
-      ];
-      const randomReply = replies[Math.floor(Math.random() * replies.length)];
-      const responseMsg = {
-        id: `msg-resp-${Date.now()}`,
-        sender: 'Compañero',
-        text: randomReply,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isSender: false,
-      };
-
-      setChats((prev) =>
-        prev.map((c) => {
-          if (c.id === chatId) {
-            return {
-              ...c,
-              lastMessage: randomReply,
-              time: 'Ahora',
-              messages: [...c.messages, responseMsg],
-            };
-          }
-          return c;
-        })
-      );
-    }, 1200);
+  // Apertura segura del carnet
+  const handleOpenCarnetWithAuth = () => {
+    if (isGuest) {
+      openUpgradeModal('obtener tu Carnet Digital QR y credencial NFC');
+    } else {
+      setIsCarnetOpen(true);
+    }
   };
+
+  // Estado de carga inicial mientras se valida token / cookies
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#faf8ff] flex flex-col items-center justify-center">
+        <div className="w-10 h-10 border-4 border-[#3525cd]/20 border-t-[#3525cd] rounded-full animate-spin mb-3" />
+        <p className="text-xs font-bold text-[#131b2e]">Conectando con Red Social Campus...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] font-sans antialiased selection:bg-[#3525cd]/20 selection:text-[#3525cd] pb-16 md:pb-0">
-      {/* PWA Custom Install Prompt Banner & Network Status */}
+    <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] flex flex-col antialiased selection:bg-[#3525cd]/15">
+      {/* PWA Prompt */}
       <PWAInstallPrompt />
 
-      {/* Global Toast Notification */}
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#131b2e] text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-2">
-          <span className="material-symbols-outlined text-[18px] text-[#6ffbbe]">
-            check_circle
-          </span>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#131b2e] text-white px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-bounce">
+          <span className="material-symbols-outlined text-[18px] text-[#67f4b7]">verified</span>
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Screen Routing */}
-      {currentTab === 'login' ? (
+      {/* Enrutamiento de Pantallas */}
+      {currentTab === 'login' || !isAuthenticated ? (
         <LoginScreen
           onLoginSuccess={() => {
             try {
@@ -363,7 +387,6 @@ export default function App() {
             }
             setShowUniversitySelectModal(false);
             setCurrentTab('feed');
-            showToast('¡Bienvenida de vuelta, Sofía!');
           }}
           selectedCampus={selectedCampus}
           onSelectCampus={(camp) => {
@@ -384,19 +407,29 @@ export default function App() {
             selectedCampus={selectedCampus}
             onOpenNotifications={() => setIsNotificationsOpen(true)}
             onOpenSearch={() => setIsSearchOpen(true)}
-            onOpenCarnet={() => setIsCarnetOpen(true)}
+            onOpenCarnet={handleOpenCarnetWithAuth}
+            userAvatar={profile?.avatar_url}
+            userName={profile?.full_name}
+            isGuest={isGuest}
           />
 
           {/* Responsive Layout Container */}
           <div className="flex-1 w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4 flex gap-6 justify-center">
-            {/* Desktop Left Sidebar (Navigation, Student Credential, Quick Actions) */}
+            {/* Desktop Left Sidebar */}
             <DesktopLeftSidebar
               currentTab={currentTab}
               onNavigate={setCurrentTab}
               unreadCount={chats.filter((c) => c.unreadCount).length}
-              onOpenCarnet={() => setIsCarnetOpen(true)}
-              onOpenCreatePost={() => setCreatePostModal({ isOpen: true, type: 'text' })}
+              onOpenCarnet={handleOpenCarnetWithAuth}
+              onOpenCreatePost={() =>
+                requireAuthAction(() => setCreatePostModal({ isOpen: true, type: 'text' }), 'crear publicaciones')
+              }
               selectedCampus={selectedCampus}
+              userAvatar={profile?.avatar_url}
+              userName={profile?.full_name}
+              userCareer={profile?.career}
+              isGuest={isGuest}
+              onOpenUpgrade={() => openUpgradeModal('crear tu cuenta y obtener carnet')}
             />
 
             {/* Screen Switcher / Main Center Column */}
@@ -419,7 +452,9 @@ export default function App() {
                   onToggleEventRsvp={handleToggleEventRsvp}
                   onOpenPdf={(name, content) => handleOpenPdf(name, content)}
                   onOpenStory={handleOpenStory}
-                  onOpenCreatePost={(type) => setCreatePostModal({ isOpen: true, type })}
+                  onOpenCreatePost={(type) =>
+                    requireAuthAction(() => setCreatePostModal({ isOpen: true, type }), 'publicar en el feed')
+                  }
                 />
               )}
 
@@ -429,7 +464,12 @@ export default function App() {
                   liveRooms={liveRooms}
                   onToggleJoinGroup={handleToggleJoinGroup}
                   onJoinLiveRoom={handleJoinLiveRoom}
-                  onOpenCreateGroupModal={() => showToast('Abriendo formulario de creación de comunidad...')}
+                  onOpenCreateGroupModal={() =>
+                    requireAuthAction(
+                      () => showToast('Abriendo formulario de creación de comunidad...'),
+                      'crear comunidades y materias'
+                    )
+                  }
                   onOpenTutorModal={() => showToast('Conectando con la Red de Tutorías Académicas...')}
                 />
               )}
@@ -439,7 +479,9 @@ export default function App() {
                   items={marketItems}
                   onToggleFav={handleToggleMarketFav}
                   onOpenChatWithSeller={handleOpenChatWithSeller}
-                  onOpenSellModal={() => setIsSellModalOpen(true)}
+                  onOpenSellModal={() =>
+                    requireAuthAction(() => setIsSellModalOpen(true), 'vender libros y calculadoras en el Market')
+                  }
                   onOpenDonateModal={() => showToast('Abriendo programa de donación de libros y apuntes')}
                   onSelectItemDetails={(item) => setSelectedItemDetail(item)}
                 />
@@ -449,14 +491,18 @@ export default function App() {
                 <MensajesScreen
                   chats={chats}
                   onSelectChat={(chat) => {
-                    setActiveChat(chat);
-                    setIsChatOpen(true);
+                    requireAuthAction(() => {
+                      setActiveChat(chat);
+                      setIsChatOpen(true);
+                    }, 'abrir mensajes privados');
                   }}
                   onOpenNewChatModal={() => {
-                    if (chats.length > 0) {
-                      setActiveChat(chats[0]);
-                      setIsChatOpen(true);
-                    }
+                    requireAuthAction(() => {
+                      if (chats.length > 0) {
+                        setActiveChat(chats[0]);
+                        setIsChatOpen(true);
+                      }
+                    }, 'iniciar nuevas conversaciones');
                   }}
                 />
               )}
@@ -464,15 +510,15 @@ export default function App() {
               {currentTab === 'perfil' && (
                 <PerfilScreen
                   university={selectedCampus}
-                  onOpenCarnet={() => setIsCarnetOpen(true)}
+                  onOpenCarnet={handleOpenCarnetWithAuth}
                   onOpenPdf={(title, content) => handleOpenPdf(title, content)}
                   onLogout={() => setCurrentTab('login')}
-                  onEditBio={() => showToast('Biografía actualizada exitosamente')}
+                  onNavigateToLogin={() => setCurrentTab('login')}
                 />
               )}
             </main>
 
-            {/* Desktop Right Sidebar (Active Study Rooms, Safety Zones, Events, Trends) */}
+            {/* Desktop Right Sidebar */}
             {currentTab !== 'mensajes' && (
               <DesktopRightSidebar
                 liveRooms={liveRooms}
@@ -490,6 +536,14 @@ export default function App() {
           />
         </div>
       )}
+
+      {/* Modal de Upgrade para Invitados */}
+      <GuestUpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={closeUpgradeModal}
+        featureName={upgradeModalFeature}
+        onNavigateToRegister={() => setCurrentTab('login')}
+      />
 
       {/* Global Modals & Overlays */}
       <CarnetModal
@@ -568,5 +622,13 @@ export default function App() {
         onConfirm={handleConfirmUniversity}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <CampusApp />
+    </AuthProvider>
   );
 }

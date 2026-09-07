@@ -4,10 +4,20 @@
  * con persistencia y estrategia híbrida (WebSocket + Base de Datos + Badge Counter).
  */
 
-import Redis from 'ioredis';
-
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-const redis = new Redis(REDIS_URL);
+const inMemoryBadges = new Map();
+let redis = null;
+
+if (process.env.ENABLE_REDIS === 'true') {
+  try {
+    const Redis = (await import('ioredis')).default;
+    redis = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
+    redis.on('error', () => {});
+    redis.connect().catch(() => {});
+  } catch {
+    redis = null;
+  }
+}
 
 // Variable para almacenar la referencia al servidor Socket.io inyectada durante bootstrap
 let globalIo = null;
@@ -66,14 +76,20 @@ class NotificationService {
         createdAt: new Date().toISOString(),
       };
 
-      // 2. Incrementar atómicamente el contador de notificaciones no leídas (Badge Count) en Redis
-      const badgeKey = `badge:user:${userId}`;
-      const unreadBadgeCount = await redis.incr(badgeKey);
+      // 2. Incrementar atómicamente el contador de notificaciones no leídas
+      let unreadBadgeCount = 1;
+      let isOnline = false;
 
-      // 3. Evaluar presencia en Redis para métricas o canal push alternativo
-      const presenceKey = `presence:user:${userId}`;
-      const activeSockets = await redis.scard(presenceKey);
-      const isOnline = activeSockets > 0;
+      if (redis && redis.status === 'ready') {
+        const badgeKey = `badge:user:${userId}`;
+        unreadBadgeCount = await redis.incr(badgeKey);
+        const presenceKey = `presence:user:${userId}`;
+        const activeSockets = await redis.scard(presenceKey);
+        isOnline = activeSockets > 0;
+      } else {
+        unreadBadgeCount = (inMemoryBadges.get(userId) || 0) + 1;
+        inMemoryBadges.set(userId, unreadBadgeCount);
+      }
 
       // 4. Emisión por WebSocket (a través del Redis Adapter de Socket.io)
       // Aunque el usuario esté en otra réplica, io.to(`user:${userId}`) lo alcanzará
@@ -184,8 +200,12 @@ class NotificationService {
    * Reiniciar o decrementar el contador de badges del usuario
    */
   static async clearBadgeCount(userId) {
-    const badgeKey = `badge:user:${userId}`;
-    await redis.set(badgeKey, 0);
+    if (redis && redis.status === 'ready') {
+      const badgeKey = `badge:user:${userId}`;
+      await redis.set(badgeKey, 0);
+    } else {
+      inMemoryBadges.set(userId, 0);
+    }
     return 0;
   }
 }

@@ -9,6 +9,9 @@ interface HeaderProps {
   onOpenSearch: () => void;
   onOpenCarnet?: () => void;
   selectedCampus?: string;
+  userAvatar?: string;
+  userName?: string;
+  isGuest?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,6 +20,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNotifications,
   onOpenSearch,
   onOpenCarnet,
+  userAvatar,
+  userName,
+  isGuest,
 }) => {
   const navLinks: { id: ScreenTab; label: string; icon: string }[] = [
     { id: 'feed', label: 'Feed', icon: 'home' },
@@ -129,13 +135,20 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
             title="Ver Perfil"
           >
-            <img
-              alt="Profile"
-              className="w-8 h-8 rounded-full object-cover ring-2 ring-[#4f46e5]/30 group-hover:ring-[#3525cd] transition-all"
-              src={CURRENT_USER.avatar}
-            />
+            <div className="relative">
+              <img
+                alt="Profile"
+                className="w-8 h-8 rounded-full object-cover ring-2 ring-[#4f46e5]/30 group-hover:ring-[#3525cd] transition-all"
+                src={userAvatar || CURRENT_USER.avatar}
+              />
+              {isGuest && (
+                <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center text-[8px] text-white font-bold" title="Modo Invitado">
+                  👁
+                </span>
+              )}
+            </div>
             <span className="hidden lg:inline text-xs font-bold text-[#131b2e] pr-1">
-              Sofía
+              {isGuest ? 'Invitado' : (userName ? userName.split(' ')[0] : 'Sofía')}
             </span>
           </button>
         </div>

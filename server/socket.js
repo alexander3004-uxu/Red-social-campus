@@ -18,15 +18,37 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
  * @param {Object} dependencies Inyección opcional de DB/servicios
  */
 export function setupWebSocketServer(httpServer, dependencies = {}) {
-  // Clientes dedicados para Redis Adapter (Pub/Sub requiere clientes aislados)
-  const pubClient = new Redis(REDIS_URL, {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-  });
-  const subClient = pubClient.duplicate();
+  let adapterInstance = undefined;
+  let redisClient = null;
 
-  // Cliente adicional para operaciones de caché de estado y presencia
-  const redisClient = pubClient.duplicate();
+  if (process.env.ENABLE_REDIS === 'true') {
+    try {
+      // Clientes dedicados para Redis Adapter (Pub/Sub requiere clientes aislados)
+      const pubClient = new Redis(REDIS_URL, {
+        maxRetriesPerRequest: 1,
+        enableReadyCheck: false,
+        lazyConnect: true,
+        retryStrategy: () => null,
+      });
+      const subClient = pubClient.duplicate();
+      redisClient = pubClient.duplicate();
+
+      const noopError = () => {};
+      pubClient.on('error', noopError);
+      subClient.on('error', noopError);
+      redisClient.on('error', noopError);
+
+      pubClient.connect().then(() => {
+        subClient.connect();
+        redisClient.connect();
+        console.log('[Socket] Conectado a Redis Adapter.');
+      }).catch(noopError);
+
+      adapterInstance = createAdapter(pubClient, subClient);
+    } catch (adapterErr) {
+      console.warn('[Socket] Redis no disponible, utilizando adaptador en memoria:', adapterErr.message);
+    }
+  }
 
   const io = new Server(httpServer, {
     cors: {
@@ -34,7 +56,7 @@ export function setupWebSocketServer(httpServer, dependencies = {}) {
       methods: ['GET', 'POST'],
       credentials: true,
     },
-    adapter: createAdapter(pubClient, subClient),
+    ...(adapterInstance ? { adapter: adapterInstance } : {}),
     // Configuración de Heartbeat para detección rápida de desconexiones fantasma/abruptas
     pingInterval: 25000, // Enviar ping cada 25 segundos
     pingTimeout: 20000,  // Considerar desconectado si no responde pong en 20 segundos
@@ -100,26 +122,28 @@ export function setupWebSocketServer(httpServer, dependencies = {}) {
     const socketUserKey = `presence:socket:${socketId}`;
 
     try {
-      // 1. Mapear socketId -> userId (TTL 24h para autolimpieza de huérfanos)
-      await redisClient.set(socketUserKey, userId, 'EX', 86400);
+      if (redisClient && redisClient.status === 'ready') {
+        // 1. Mapear socketId -> userId (TTL 24h para autolimpieza de huérfanos)
+        await redisClient.set(socketUserKey, userId, 'EX', 86400);
 
-      // 2. Agregar socketId al SET del usuario
-      const addedCount = await redisClient.sadd(userPresenceKey, socketId);
-      const activeSocketsCount = await redisClient.scard(userPresenceKey);
+        // 2. Agregar socketId al SET del usuario
+        const addedCount = await redisClient.sadd(userPresenceKey, socketId);
+        const activeSocketsCount = await redisClient.scard(userPresenceKey);
 
-      // Si antes no tenía sockets (addedCount === 1 && activeSocketsCount === 1), pasa a ONLINE
-      if (activeSocketsCount === 1) {
-        await redisClient.hset(`user:status:${userId}`, {
-          online: 'true',
-          lastSeen: new Date().toISOString(),
-        });
+        // Si antes no tenía sockets (addedCount === 1 && activeSocketsCount === 1), pasa a ONLINE
+        if (activeSocketsCount === 1) {
+          await redisClient.hset(`user:status:${userId}`, {
+            online: 'true',
+            lastSeen: new Date().toISOString(),
+          });
 
-        // Difundir estado Online a través del Redis Adapter a todos los clientes
-        io.emit('presence:status_change', {
-          userId,
-          status: 'online',
-          timestamp: Date.now(),
-        });
+          // Difundir estado Online a través del Redis Adapter a todos los clientes
+          io.emit('presence:status_change', {
+            userId,
+            status: 'online',
+            timestamp: Date.now(),
+          });
+        }
       }
     } catch (presenceErr) {
       console.error(`[Presencia] Error al registrar conexión de ${userId}:`, presenceErr);
@@ -311,27 +335,29 @@ export function setupWebSocketServer(httpServer, dependencies = {}) {
     // ==========================================================================
     socket.on('disconnect', async (reason) => {
       try {
-        // Remover este socket específico del set de conexiones del usuario
-        await redisClient.srem(userPresenceKey, socketId);
-        await redisClient.del(socketUserKey);
+        if (redisClient && redisClient.status === 'ready') {
+          // Remover este socket específico del set de conexiones del usuario
+          await redisClient.srem(userPresenceKey, socketId);
+          await redisClient.del(socketUserKey);
 
-        const remainingSockets = await redisClient.scard(userPresenceKey);
+          const remainingSockets = await redisClient.scard(userPresenceKey);
 
-        // Si ya no quedan conexiones activas en ningún dispositivo o pestaña
-        if (remainingSockets === 0) {
-          const nowIso = new Date().toISOString();
-          await redisClient.hset(`user:status:${userId}`, {
-            online: 'false',
-            lastSeen: nowIso,
-          });
+          // Si ya no quedan conexiones activas en ningún dispositivo o pestaña
+          if (remainingSockets === 0) {
+            const nowIso = new Date().toISOString();
+            await redisClient.hset(`user:status:${userId}`, {
+              online: 'false',
+              lastSeen: nowIso,
+            });
 
-          // Notificar desconexión a toda la red o a sus contactos
-          io.emit('presence:status_change', {
-            userId,
-            status: 'offline',
-            lastSeen: nowIso,
-            reason,
-          });
+            // Notificar desconexión a toda la red o a sus contactos
+            io.emit('presence:status_change', {
+              userId,
+              status: 'offline',
+              lastSeen: nowIso,
+              reason,
+            });
+          }
         }
       } catch (err) {
         console.error(`[Desconexión] Error limpiando presencia para ${userId}:`, err);

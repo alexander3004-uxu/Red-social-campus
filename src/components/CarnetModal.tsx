@@ -97,7 +97,7 @@ export const CarnetModal: React.FC<CarnetModalProps> = ({ isOpen, onClose, unive
             </div>
 
             {/* QR Code & Barcode Simulation */}
-            <div className="bg-white rounded-xl p-3 flex items-center justify-between gap-2 text-black">
+            <div data-qr-card className="bg-white rounded-xl p-3 flex items-center justify-between gap-2 text-black">
               <div className="flex flex-col">
                 <span className="text-[9px] uppercase tracking-wider text-[#464555] font-bold">
                   Código QR Dinámico
@@ -110,7 +110,7 @@ export const CarnetModal: React.FC<CarnetModalProps> = ({ isOpen, onClose, unive
               </div>
 
               {/* QR Image Graphic */}
-              <div className="w-16 h-16 bg-white p-1 rounded-lg border border-gray-200 flex items-center justify-center">
+              <div data-qr-card className="w-16 h-16 bg-white p-1 rounded-lg border border-gray-200 flex items-center justify-center">
                 <img
                   alt="QR Code"
                   className="w-full h-full object-contain"

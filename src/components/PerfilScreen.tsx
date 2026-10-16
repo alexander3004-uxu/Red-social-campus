@@ -11,6 +11,7 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { CURRENT_USER } from '../data/mockData';
+import { useTheme } from '../context/ThemeContext';
 
 interface PerfilScreenProps {
   onOpenCarnet: () => void;
@@ -39,11 +40,13 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
     openUpgradeModal,
   } = useAuth();
 
+  const { theme, isDark, toggleTheme, setTheme } = useTheme();
+
   const [activeTab, setActiveTab] = useState<'apuntes' | 'market' | 'grupos' | 'resenas'>('apuntes');
 
   // Estados del modal de edición de perfil
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editActiveSection, setEditActiveSection] = useState<'info' | 'security'>('info');
+  const [editActiveSection, setEditActiveSection] = useState<'info' | 'security' | 'appearance'>('info');
 
   // Formulario de Información Personal
   const [editFullName, setEditFullName] = useState(profile?.full_name || CURRENT_USER.name);
@@ -351,6 +354,17 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
               {/* Acciones flotantes sobre el banner */}
               <div className="absolute top-3 right-4 flex items-center gap-2">
                 <button
+                  onClick={toggleTheme}
+                  aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                  title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                  className="w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-[#131b2e] shadow-xs active:scale-95 transition-transform"
+                  type="button"
+                >
+                  <span className={`material-symbols-outlined text-[18px] ${isDark ? 'text-amber-400' : 'text-[#3525cd]'}`}>
+                    {isDark ? 'light_mode' : 'dark_mode'}
+                  </span>
+                </button>
+                <button
                   onClick={() => {
                     navigator.clipboard?.writeText(window.location.href);
                     showToast('Enlace de perfil universitario copiado.');
@@ -371,6 +385,7 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                   <span className="material-symbols-outlined text-[18px]">logout</span>
                 </button>
               </div>
+
             </div>
 
             {/* Avatar Superpuesto con Botón de Carga */}
@@ -584,8 +599,8 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
               </button>
             </div>
 
-            {/* Pestañas internas: Datos del Campus vs. Seguridad */}
-            <div className="flex p-1 bg-[#f2f3ff] rounded-xl">
+            {/* Pestañas internas: Datos del Campus vs. Seguridad vs. Apariencia */}
+            <div className="flex p-1 bg-[#f2f3ff] rounded-xl gap-1">
               <button
                 type="button"
                 onClick={() => setEditActiveSection('info')}
@@ -593,7 +608,7 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                   editActiveSection === 'info' ? 'bg-white text-[#3525cd] shadow-xs' : 'text-[#464555]'
                 }`}
               >
-                Información del Campus
+                Campus
               </button>
               <button
                 type="button"
@@ -602,9 +617,19 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                   editActiveSection === 'security' ? 'bg-white text-[#3525cd] shadow-xs' : 'text-[#464555]'
                 }`}
               >
-                Seguridad & Contraseña
+                Seguridad
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditActiveSection('appearance')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  editActiveSection === 'appearance' ? 'bg-white text-[#3525cd] shadow-xs' : 'text-[#464555]'
+                }`}
+              >
+                Apariencia
               </button>
             </div>
+
 
             {feedbackMessage && (
               <div
@@ -745,9 +770,100 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                 </button>
               </form>
             )}
+
+            {/* SECCIÓN 3: APARIENCIA Y TEMA */}
+            {editActiveSection === 'appearance' && (
+              <div className="space-y-4 py-2">
+                <div>
+                  <h4 className="text-xs font-bold text-[#131b2e]">Tema de la Interfaz</h4>
+                  <p className="text-[11px] text-[#464555] mt-0.5">
+                    Personaliza cómo se ve CampusLink en tu dispositivo según tu preferencia de estudio.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2.5">
+                  {/* Modo Claro */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTheme('light');
+                      showToast('Modo Claro activado');
+                    }}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all text-center ${
+                      theme === 'light'
+                        ? 'border-[#3525cd] bg-[#3525cd]/10 ring-2 ring-[#3525cd]/20'
+                        : 'border-[#eaedff] bg-[#f2f3ff] hover:bg-[#eaedff]'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-white text-[#3525cd] shadow-xs flex items-center justify-center border border-[#eaedff]">
+                      <span className="material-symbols-outlined text-[20px]">light_mode</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-bold text-[#131b2e]">Claro</span>
+                      <span className="text-[10px] text-[#464555]">Diurno</span>
+                    </div>
+                  </button>
+
+                  {/* Modo Oscuro */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTheme('dark');
+                      showToast('Modo Oscuro activado');
+                    }}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all text-center ${
+                      theme === 'dark'
+                        ? 'border-[#3525cd] bg-[#3525cd]/10 ring-2 ring-[#3525cd]/20'
+                        : 'border-[#eaedff] bg-[#f2f3ff] hover:bg-[#eaedff]'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-[#131b2e] text-amber-400 shadow-xs flex items-center justify-center border border-[#1e293b]">
+                      <span className="material-symbols-outlined text-[20px]">dark_mode</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-bold text-[#131b2e]">Oscuro</span>
+                      <span className="text-[10px] text-[#464555]">Nocturno</span>
+                    </div>
+                  </button>
+
+                  {/* Automático / Sistema */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTheme('system');
+                      showToast('Preferencia del sistema activada');
+                    }}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all text-center ${
+                      theme === 'system'
+                        ? 'border-[#3525cd] bg-[#3525cd]/10 ring-2 ring-[#3525cd]/20'
+                        : 'border-[#eaedff] bg-[#f2f3ff] hover:bg-[#eaedff]'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#3525cd] to-[#712ae2] text-white shadow-xs flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[20px]">devices</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-bold text-[#131b2e]">Sistema</span>
+                      <span className="text-[10px] text-[#464555]">Automático</span>
+                    </div>
+                  </button>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-[#f2f3ff] border border-[#eaedff] flex items-center gap-3">
+                  <span className="material-symbols-outlined text-[#3525cd] text-[20px]">
+                    visibility
+                  </span>
+                  <div className="text-[11px] text-[#464555]">
+                    Estado activo actual: <strong className="text-[#131b2e]">{isDark ? 'Modo Oscuro' : 'Modo Claro'}</strong>
+                    {theme === 'system' && ' (según la preferencia de tu dispositivo)'}.
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
+
     </div>
   );
 };

@@ -33,6 +33,7 @@ import { UniversitySelectModal } from './components/UniversitySelectModal';
 import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { socketClient } from './services/socketClient';
+import { supabaseDataService } from './services/supabaseDataService';
 
 function CampusApp() {
   const {
@@ -99,11 +100,101 @@ function CampusApp() {
 
   // App Data State
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
-  const [stories] = useState<Story[]>(STORIES);
+  const [stories, setStories] = useState<Story[]>(STORIES);
   const [marketItems, setMarketItems] = useState<MarketItem[]>(INITIAL_MARKET_ITEMS);
   const [groups, setGroups] = useState<CommunityGroup[]>(COMMUNITY_GROUPS);
   const [liveRooms, setLiveRooms] = useState<LiveRoom[]>(LIVE_ROOMS);
   const [chats, setChats] = useState<ChatThread[]>(INITIAL_CHATS);
+
+  // Sincronización en tiempo real con Supabase
+  useEffect(() => {
+    let active = true;
+
+    async function loadData() {
+      try {
+        const [dbPosts, dbStories, dbMarket, dbGroups, dbChats] = await Promise.all([
+          supabaseDataService.fetchPosts(user?.id),
+          supabaseDataService.fetchStories(),
+          supabaseDataService.fetchMarketItems(user?.id),
+          supabaseDataService.fetchGroups(user?.id),
+          supabaseDataService.fetchChats(),
+        ]);
+
+        if (active) {
+          if (dbPosts?.length) setPosts(dbPosts);
+          if (dbStories?.length) setStories(dbStories);
+          if (dbMarket?.length) setMarketItems(dbMarket);
+          if (dbGroups?.length) setGroups(dbGroups);
+          if (dbChats?.length) setChats(dbChats);
+        }
+      } catch (e) {
+        console.warn('[Supabase] Usando datos locales:', e);
+      }
+    }
+
+    loadData();
+
+    // Suscripciones Realtime
+    const unsubPosts = supabaseDataService.subscribeToPosts(
+      (newPost) => setPosts((prev) => prev.some((p) => p.id === newPost.id) ? prev : [newPost, ...prev]),
+      (updPost) => setPosts((prev) => prev.map((p) => p.id === updPost.id ? { ...p, ...updPost } : p)),
+      (delId) => setPosts((prev) => prev.filter((p) => p.id !== delId))
+    );
+
+    const unsubStories = supabaseDataService.subscribeToStories(
+      (newStory) => setStories((prev) => prev.some((s) => s.id === newStory.id) ? prev : [newStory, ...prev])
+    );
+
+    const unsubMarket = supabaseDataService.subscribeToMarket(
+      (newItem) => setMarketItems((prev) => prev.some((i) => i.id === newItem.id) ? prev : [newItem, ...prev]),
+      (updItem) => setMarketItems((prev) => prev.map((i) => i.id === updItem.id ? { ...i, ...updItem } : i))
+    );
+
+    const unsubGroups = supabaseDataService.subscribeToGroups(
+      (updGroup) => setGroups((prev) => prev.map((g) => g.id === updGroup.id ? { ...g, ...updGroup } : g))
+    );
+
+    const unsubChat = supabaseDataService.subscribeToChat(
+      (incomingMsg) => {
+        setChats((prev) =>
+          prev.map((thread) => {
+            if (thread.id === incomingMsg.thread_id) {
+              if (thread.messages.some((m) => m.id === incomingMsg.id)) return thread;
+              return {
+                ...thread,
+                lastMessage: incomingMsg.text,
+                time: incomingMsg.time || 'Ahora',
+                messages: [
+                  ...thread.messages,
+                  {
+                    id: incomingMsg.id,
+                    sender: incomingMsg.sender,
+                    text: incomingMsg.text,
+                    time: incomingMsg.time || 'Ahora',
+                  },
+                ],
+              };
+            }
+            return thread;
+          })
+        );
+      },
+      (updThread) => {
+        setChats((prev) =>
+          prev.map((t) => t.id === updThread.id ? { ...t, lastMessage: updThread.last_message, time: updThread.time } : t)
+        );
+      }
+    );
+
+    return () => {
+      active = false;
+      unsubPosts();
+      unsubStories();
+      unsubMarket();
+      unsubGroups();
+      unsubChat();
+    };
+  }, [user?.id]);
 
   // Modal States
   const [isCarnetOpen, setIsCarnetOpen] = useState(false);
@@ -153,33 +244,46 @@ function CampusApp() {
   // Interacciones: Feed protegidas con guard de invitado
   const handleToggleLike = (postId: string) => {
     requireAuthAction(() => {
+      let nextLiked = false;
+      let nextLikes = 0;
       setPosts((prev) =>
         prev.map((p) => {
           if (p.id === postId) {
-            const isLiked = !p.isLiked;
+            nextLiked = !p.isLiked;
+            nextLikes = nextLiked ? p.likes + 1 : p.likes - 1;
             return {
               ...p,
-              isLiked,
-              likes: isLiked ? p.likes + 1 : p.likes - 1,
+              isLiked: nextLiked,
+              likes: nextLikes,
             };
           }
           return p;
         })
       );
+      supabaseDataService.toggleLikePost(postId, user?.id || 'guest', nextLiked, nextLikes);
     }, 'dar me gusta a publicaciones');
   };
 
   const handleToggleSave = (postId: string) => {
     requireAuthAction(() => {
+      let nextSaved = false;
       setPosts((prev) =>
-        prev.map((p) => (p.id === postId ? { ...p, isSaved: !p.isSaved } : p))
+        prev.map((p) => {
+          if (p.id === postId) {
+            nextSaved = !p.isSaved;
+            return { ...p, isSaved: nextSaved };
+          }
+          return p;
+        })
       );
+      supabaseDataService.toggleSavePost(postId, user?.id || 'guest', nextSaved);
       showToast('Publicación guardada en tu perfil');
     }, 'guardar publicaciones en tu perfil');
   };
 
   const handleVotePoll = (postId: string, optionId: string) => {
     requireAuthAction(() => {
+      let updatedPoll: any = null;
       setPosts((prev) =>
         prev.map((p) => {
           if (p.id === postId && p.poll) {
@@ -195,41 +299,47 @@ function CampusApp() {
             });
             const totalVotes = updatedOptions.reduce((acc, curr) => acc + curr.votes, 0);
 
+            updatedPoll = {
+              ...p.poll,
+              totalVotes,
+              userVotedOption: alreadyVoted ? undefined : optionId,
+              options: updatedOptions,
+            };
+
             return {
               ...p,
-              poll: {
-                ...p.poll,
-                totalVotes,
-                userVotedOption: alreadyVoted ? undefined : optionId,
-                options: updatedOptions,
-              },
+              poll: updatedPoll,
             };
           }
           return p;
         })
       );
+      if (updatedPoll) supabaseDataService.updatePostPoll(postId, updatedPoll);
       showToast('Tu voto ha sido registrado');
     }, 'votar en encuestas académicas');
   };
 
   const handleToggleEventRsvp = (postId: string) => {
     requireAuthAction(() => {
+      let updatedEvent: any = null;
       setPosts((prev) =>
         prev.map((p) => {
           if (p.id === postId && p.event) {
             const nextAttending = !p.event.isAttending;
+            updatedEvent = {
+              ...p.event,
+              isAttending: nextAttending,
+              attendeesCount: nextAttending ? p.event.attendeesCount + 1 : p.event.attendeesCount - 1,
+            };
             return {
               ...p,
-              event: {
-                ...p.event,
-                isAttending: nextAttending,
-                attendeesCount: nextAttending ? p.event.attendeesCount + 1 : p.event.attendeesCount - 1,
-              },
+              event: updatedEvent,
             };
           }
           return p;
         })
       );
+      if (updatedEvent) supabaseDataService.updatePostEvent(postId, updatedEvent);
       showToast('¡Asistencia confirmada para el evento del campus!');
     }, 'confirmar asistencia a eventos del campus');
   };
@@ -256,9 +366,17 @@ function CampusApp() {
   // Interacciones: Market
   const handleToggleMarketFav = (itemId: string) => {
     requireAuthAction(() => {
+      let nextFav = false;
       setMarketItems((prev) =>
-        prev.map((item) => (item.id === itemId ? { ...item, isFav: !item.isFav } : item))
+        prev.map((item) => {
+          if (item.id === itemId) {
+            nextFav = !item.isFav;
+            return { ...item, isFav: nextFav };
+          }
+          return item;
+        })
       );
+      supabaseDataService.toggleMarketFav(itemId, user?.id || 'guest', nextFav);
     }, 'guardar artículos favoritos');
   };
 
@@ -292,6 +410,7 @@ function CampusApp() {
           ],
         };
         setChats([targetChat, ...chats]);
+        supabaseDataService.createChatThread(targetChat);
       }
       setActiveChat(targetChat);
       setIsChatOpen(true);
@@ -315,25 +434,30 @@ function CampusApp() {
       };
       setActiveChat(updatedChat);
       setChats((prev) => prev.map((c) => (c.id === activeChat.id ? updatedChat : c)));
+      supabaseDataService.sendChatMessage(activeChat.id, newMessage);
     }, 'enviar mensajes en el chat');
   };
 
   const handleToggleJoinGroup = (groupId: string) => {
     requireAuthAction(() => {
+      let nextJoined = false;
+      let nextMembers = 0;
       setGroups((prev) =>
         prev.map((g) => {
           if (g.id === groupId) {
-            const isJoined = !g.isJoined;
-            showToast(isJoined ? `¡Te uniste a ${g.title}!` : `Saliste de ${g.title}`);
+            nextJoined = !g.isJoined;
+            nextMembers = nextJoined ? g.membersCount + 1 : g.membersCount - 1;
+            showToast(nextJoined ? `¡Te uniste a ${g.title}!` : `Saliste de ${g.title}`);
             return {
               ...g,
-              isJoined,
-              membersCount: isJoined ? g.membersCount + 1 : g.membersCount - 1,
+              isJoined: nextJoined,
+              membersCount: nextMembers,
             };
           }
           return g;
         })
       );
+      supabaseDataService.toggleJoinGroup(groupId, user?.id || 'guest', nextJoined, nextMembers);
     }, 'unirte a grupos de estudio');
   };
 
@@ -578,6 +702,7 @@ function CampusApp() {
         onClose={() => setCreatePostModal({ isOpen: false })}
         onAddPost={(newPost) => {
           setPosts([newPost, ...posts]);
+          supabaseDataService.createPost(newPost, user?.id);
           showToast('Publicación compartida con el campus');
         }}
       />
@@ -587,6 +712,7 @@ function CampusApp() {
         onClose={() => setIsSellModalOpen(false)}
         onAddItem={(newItem) => {
           setMarketItems([newItem, ...marketItems]);
+          supabaseDataService.createMarketItem(newItem, user?.id);
           showToast('Artículo publicado en el Market');
         }}
       />

@@ -76,93 +76,12 @@ function issueAuthSession(res, user, profile, isGuest = false, guestSessionId = 
 /**
  * 1. REGISTRO TRADICIONAL (EMAIL & CONTRASEÑA)
  */
-export async function register(req, res) {
-  try {
-    const {
-      email,
-      password,
-      full_name,
-      username,
-      university,
-      faculty,
-      career,
-      semester,
-      guestSessionId,
-    } = req.body;
-
-    // Verificar si el correo ya está registrado
-    const existingEmail = await db.findUserByEmail(email);
-    if (existingEmail) {
-      return res.status(409).json({
-        success: false,
-        code: 'EMAIL_ALREADY_EXISTS',
-        message: 'Ya existe una cuenta universitaria registrada con este correo electrónico.',
-      });
-    }
-
-    // Verificar si el @username ya está en uso
-    const existingUsername = await db.findProfileByUsername(username);
-    if (existingUsername) {
-      return res.status(409).json({
-        success: false,
-        code: 'USERNAME_TAKEN',
-        message: 'El nombre de usuario ya está en uso. Por favor, elige otro @username.',
-      });
-    }
-
-    // Hashing seguro con bcrypt (mínimo 10 salt rounds)
-    const saltRounds = 10;
-    const password_hash = await bcrypt.hash(password, saltRounds);
-
-    // Crear usuario en base de datos
-    const newUser = await db.createUser({
-      email,
-      password_hash,
-      role: 'student',
-      is_verified: email.toLowerCase().includes('.edu') || email.toLowerCase().includes('.ac.'),
-    });
-
-    // Crear perfil asociado
-    const newProfile = await db.createProfile({
-      user_id: newUser.id,
-      username,
-      full_name,
-      university,
-      faculty,
-      career,
-      semester,
-    });
-
-    // Si provenía de una sesión de invitado, registrar la transición
-    if (guestSessionId) {
-      console.log(`[Auth Upgrade] Invitado ${guestSessionId} convertido a cuenta registrada: ${newUser.id}`);
-    }
-
-    // Emitir tokens y cookies HTTP-only
-    const { accessToken } = issueAuthSession(res, newUser, newProfile, false);
-
-    return res.status(201).json({
-      success: true,
-      code: 'REGISTRATION_SUCCESS',
-      message: '¡Registro universitario completado con éxito! Bienvenido al Campus.',
-      token: accessToken,
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        role: newUser.role,
-        is_verified: newUser.is_verified,
-        isGuest: false,
-      },
-      profile: newProfile,
-    });
-  } catch (error) {
-    console.error('[Auth Controller] Error en registro:', error);
-    return res.status(500).json({
-      success: false,
-      code: 'REGISTRATION_FAILED',
-      message: 'Ocurrió un error al procesar el registro universitario.',
-    });
-  }
+export async function register(_req, res) {
+  return res.status(501).json({
+    success: false,
+    code: 'NOT_IMPLEMENTED_ASSIGNMENT',
+    message: 'Módulo en desarrollo: La creación y registro de cuentas reales debe ser implementada por los estudiantes en Supabase (Auth / tabla users).',
+  });
 }
 
 /**

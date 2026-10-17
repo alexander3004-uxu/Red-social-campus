@@ -105,40 +105,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   /**
-   * Envío del formulario de Registro
+   * Formulario de Registro (Interfaz visual / No funcional)
    */
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
-    setValidationErrors([]);
-
-    if (regPassword.length < 8) {
-      setErrorMessage('La contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      await register({
-        email: regEmail,
-        password: regPassword,
-        full_name: regFullName,
-        username: regUsername.replace(/^@/, '').toLowerCase().trim(),
-        university: selectedCampus,
-        faculty: regFaculty,
-        career: regCareer,
-        semester: regSemester,
-      });
-
-      triggerToast('¡Cuenta universitaria creada exitosamente!');
-      setTimeout(() => onLoginSuccess(), 500);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Error al registrar la cuenta.');
-      if (err.errors) setValidationErrors(err.errors);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   /**

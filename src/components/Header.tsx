@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScreenTab } from '../types';
 import { CURRENT_USER } from '../data/mockData';
+import { useTheme } from '../context/ThemeContext';
 
 interface HeaderProps {
   currentTab: ScreenTab;
@@ -24,6 +25,8 @@ export const Header: React.FC<HeaderProps> = ({
   userName,
   isGuest,
 }) => {
+  const { isDark, toggleTheme } = useTheme();
+
   const navLinks: { id: ScreenTab; label: string; icon: string }[] = [
     { id: 'feed', label: 'Feed', icon: 'home' },
     { id: 'grupos', label: 'Grupos', icon: 'groups' },
@@ -126,6 +129,24 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="material-symbols-outlined text-[20px]">notifications</span>
             <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#ba1a1a] ring-2 ring-[#faf8ff]"></span>
           </button>
+
+          {/* Theme Toggle (Dark / Light) */}
+          <button
+            onClick={toggleTheme}
+            aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-[#464555] hover:bg-[#eaedff] transition-all active:scale-95 group"
+            type="button"
+          >
+            <span
+              className={`material-symbols-outlined text-[20px] transition-transform duration-300 ${
+                isDark ? 'rotate-180 text-amber-400' : 'rotate-0 text-[#3525cd]'
+              }`}
+            >
+              {isDark ? 'light_mode' : 'dark_mode'}
+            </span>
+          </button>
+
 
           {/* User Profile Avatar */}
           <button

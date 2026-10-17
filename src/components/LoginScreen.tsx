@@ -11,6 +11,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
@@ -26,6 +27,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   initialMode = 'login',
 }) => {
   const { loginWithEmail, register, loginWithGoogle, loginAsGuest } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
 
   // Modo actual: 'login' o 'register'
   const [authMode, setAuthMode] = useState<'login' | 'register'>(initialMode);
@@ -103,40 +105,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   /**
-   * Envío del formulario de Registro
+   * Formulario de Registro (Interfaz visual / No funcional)
    */
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
-    setValidationErrors([]);
-
-    if (regPassword.length < 8) {
-      setErrorMessage('La contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      await register({
-        email: regEmail,
-        password: regPassword,
-        full_name: regFullName,
-        username: regUsername.replace(/^@/, '').toLowerCase().trim(),
-        university: selectedCampus,
-        faculty: regFaculty,
-        career: regCareer,
-        semester: regSemester,
-      });
-
-      triggerToast('¡Cuenta universitaria creada exitosamente!');
-      setTimeout(() => onLoginSuccess(), 500);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Error al registrar la cuenta.');
-      if (err.errors) setValidationErrors(err.errors);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   /**
@@ -215,6 +187,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Floating Theme Switcher */}
+      <div className="absolute top-4 right-4 z-20">
+        <button
+          onClick={toggleTheme}
+          type="button"
+          aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          className="w-10 h-10 rounded-full bg-white shadow-sm border border-[#eaedff] flex items-center justify-center text-[#464555] hover:bg-[#eaedff] transition-all active:scale-95"
+        >
+          <span className={`material-symbols-outlined text-[20px] ${isDark ? 'text-amber-400' : 'text-[#3525cd]'}`}>
+            {isDark ? 'light_mode' : 'dark_mode'}
+          </span>
+        </button>
+      </div>
+
 
       <div className="w-full max-w-md flex flex-col space-y-4">
         {/* Brand Header */}

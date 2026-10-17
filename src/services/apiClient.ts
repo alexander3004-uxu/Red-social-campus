@@ -260,60 +260,14 @@ class ApiClient {
 
     const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
 
-    // 1. REGISTRO TRADICIONAL
+    // 1. REGISTRO TRADICIONAL (ASIGNACIÓN PARA ESTUDIANTES)
     if (endpoint === '/api/auth/register' && options.method === 'POST') {
-      const { email, password, full_name, username, university, faculty, career, semester } = body;
-      const users = LocalAuthStore.getUsers();
-
-      if (users.some((u) => u.email.toLowerCase() === email.toLowerCase().trim())) {
-        const err: any = new Error('Ya existe una cuenta universitaria registrada con este correo electrónico.');
-        err.status = 409;
-        err.code = 'EMAIL_ALREADY_EXISTS';
-        return Promise.reject(err);
-      }
-
-      const newId = `user_${Date.now()}`;
-      const newProfile = {
-        id: `prof_${newId}`,
-        user_id: newId,
-        username: (username || email.split('@')[0]).replace(/^@/, '').toLowerCase().trim(),
-        full_name: full_name || 'Estudiante Universitario',
-        bio: 'Estudiante activo de la comunidad CampusLink.',
-        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-        banner_url: CURRENT_USER.banner,
-        university: university || 'Universidad Central (Sede Principal)',
-        faculty: faculty || 'Facultad de Ingeniería',
-        career: career || 'Ingeniería de Software',
-        semester: semester || '1er Semestre',
-        student_id: `UC-2026-${Math.floor(10000 + Math.random() * 90000)}`,
-        reputation: 5.0,
-        social_links: [],
-      };
-
-      const newUser = {
-        id: newId,
-        email: email.toLowerCase().trim(),
-        password,
-        role: 'student',
-        is_verified: true,
-        profile: newProfile,
-      };
-
-      users.push(newUser);
-      LocalAuthStore.saveUsers(users);
-
-      const token = `local_jwt_${newId}_${Date.now()}`;
-      this.setToken(token);
-      LocalAuthStore.setSession({ token, user: newUser, profile: newProfile });
-
-      return Promise.resolve({
-        success: true,
-        code: 'REGISTRATION_SUCCESS',
-        message: '¡Registro universitario completado con éxito!',
-        token,
-        user: { id: newUser.id, email: newUser.email, role: 'student', is_verified: true, isGuest: false },
-        profile: newProfile,
-      } as T);
+      const err: any = new Error(
+        'Módulo en desarrollo: La creación y registro de cuentas reales debe ser implementada por los estudiantes en Supabase (Auth / tabla users).'
+      );
+      err.status = 501;
+      err.code = 'NOT_IMPLEMENTED_ASSIGNMENT';
+      return Promise.reject(err);
     }
 
     // 2. INICIO DE SESIÓN TRADICIONAL

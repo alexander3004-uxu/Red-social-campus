@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
@@ -137,3 +139,167 @@
     padding-top: env(safe-area-inset-top, 0px);
   }
 }
+
+/* ==============================================================================
+   DARK THEME SYSTEM
+   Transforms all campus components into a clean, modern dark aesthetic
+   when <html class="dark"> is present. Completely leaves light mode intact
+   when "dark" class is not active.
+   ============================================================================== */
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0b0f19 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Surface backgrounds */
+html.dark .bg-white {
+  background-color: #131b2e !important;
+}
+
+html.dark .bg-\[\#faf8ff\],
+html.dark .bg-\[\#faf8ff\]\/95 {
+  background-color: rgba(11, 15, 25, 0.95) !important;
+}
+
+html.dark .bg-\[\#faf8ff\]\/30 {
+  background-color: rgba(11, 15, 25, 0.3) !important;
+}
+
+/* Muted / Chip / Input backgrounds */
+html.dark .bg-\[\#f2f3ff\] {
+  background-color: #1a233b !important;
+}
+
+html.dark .bg-\[\#eaedff\] {
+  background-color: #212c49 !important;
+}
+
+html.dark .bg-\[\#e2e7ff\] {
+  background-color: #263354 !important;
+}
+
+html.dark .bg-\[\#dae2fd\] {
+  background-color: #2d3b61 !important;
+}
+
+/* Hover effects */
+html.dark .hover\:bg-\[\#eaedff\]:hover {
+  background-color: #212c49 !important;
+}
+
+html.dark .hover\:bg-\[\#f2f3ff\]:hover {
+  background-color: #1a233b !important;
+}
+
+html.dark .hover\:bg-\[\#dfe4ff\]:hover {
+  background-color: #263354 !important;
+}
+
+html.dark .hover\:bg-\[\#dae2fd\]:hover {
+  background-color: #2d3b61 !important;
+}
+
+/* Borders and dividers */
+html.dark .border-\[\#eaedff\],
+html.dark .border-\[\#e2e7ff\],
+html.dark .border-\[\#f2f3ff\],
+html.dark .border-\[\#dae2fd\],
+html.dark .border-\[\#c7c4d8\] {
+  border-color: #1e293b !important;
+}
+
+/* Typography */
+html.dark .text-\[\#131b2e\] {
+  color: #f1f5f9 !important;
+}
+
+html.dark .text-\[\#464555\] {
+  color: #94a3b8 !important;
+}
+
+html.dark .text-\[\#777587\] {
+  color: #64748b !important;
+}
+
+html.dark .text-\[\#0f0069\] {
+  color: #c3c0ff !important;
+}
+
+/* Focus and input states */
+html.dark .focus\:bg-white:focus {
+  background-color: #1a233b !important;
+}
+
+html.dark input,
+html.dark textarea,
+html.dark select {
+  color-scheme: dark;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Special containers and badges */
+html.dark .bg-\[\#e2dfff\]\/40 {
+  background-color: rgba(53, 37, 205, 0.18) !important;
+  border-color: #212c49 !important;
+}
+
+html.dark .bg-\[\#6ffbbe\]\/25 {
+  background-color: rgba(111, 251, 190, 0.15) !important;
+}
+
+html.dark .text-\[\#005338\] {
+  color: #6ffbbe !important;
+}
+
+html.dark .ring-\[\#faf8ff\] {
+  --tw-ring-color: #0b0f19 !important;
+}
+
+html.dark .from-\[\#faf8ff\] {
+  --tw-gradient-from: #0b0f19 var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(11, 15, 25, 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+html.dark .via-\[\#faf8ff\]\/30 {
+  --tw-gradient-via: rgba(11, 15, 25, 0.3) var(--tw-gradient-via-position) !important;
+}
+
+/* Scrollbar styles for dark mode */
+html.dark ::-webkit-scrollbar-track {
+  background: #0b0f19;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #212c49;
+  border-radius: 4px;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3525cd;
+}
+
+/* Scanner exception: Maintain high optical contrast for physical QR codes & barcodes */
+html.dark [data-qr-card],
+html.dark [data-qr-card] .bg-white {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+html.dark [data-qr-card] .text-\[\#464555\],
+html.dark [data-qr-card] .text-\[\#777587\] {
+  color: #4b5563 !important;
+}
+
+html.dark [data-qr-card] .text-\[\#3525cd\] {
+  color: #3525cd !important;
+}
+
+

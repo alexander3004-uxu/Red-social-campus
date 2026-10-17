@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScreenTab } from '../types';
 import { CURRENT_USER } from '../data/mockData';
+import { useTheme } from '../context/ThemeContext';
 
 interface DesktopLeftSidebarProps {
   currentTab: ScreenTab;
@@ -29,6 +30,8 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
   isGuest,
   onOpenUpgrade,
 }) => {
+  const { isDark, toggleTheme } = useTheme();
+
   const navItems: { id: ScreenTab; label: string; icon: string; badge?: number }[] = [
     { id: 'feed', label: 'Feed del Campus', icon: 'home' },
     { id: 'grupos', label: 'Grupos & Materias', icon: 'groups' },
@@ -126,7 +129,7 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
           );
         })}
 
-        <div className="pt-2 mt-1 border-t border-[#f2f3ff]">
+        <div className="pt-2 mt-1 border-t border-[#f2f3ff] space-y-1.5">
           <button
             onClick={onOpenCreatePost}
             className="w-full py-2.5 px-3 rounded-2xl bg-[#eaedff] hover:bg-[#dfe4ff] text-[#3525cd] text-xs font-bold flex items-center justify-center gap-2 transition-colors"
@@ -134,8 +137,26 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
             <span className="material-symbols-outlined text-[18px]">add_circle</span>
             <span>Crear Publicación</span>
           </button>
+
+          <button
+            onClick={toggleTheme}
+            type="button"
+            className="w-full py-2 px-3 rounded-2xl flex items-center justify-between text-xs font-semibold text-[#464555] hover:bg-[#f2f3ff] hover:text-[#131b2e] transition-colors"
+            title={isDark ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className={`material-symbols-outlined text-[18px] ${isDark ? 'text-amber-400' : 'text-[#3525cd]'}`}>
+                {isDark ? 'light_mode' : 'dark_mode'}
+              </span>
+              <span>Modo {isDark ? 'Claro' : 'Oscuro'}</span>
+            </div>
+            <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${isDark ? 'bg-[#3525cd]' : 'bg-[#e2e7ff]'}`}>
+              <div className={`w-3 h-3 rounded-full bg-white transition-transform ${isDark ? 'translate-x-4' : 'translate-x-0'}`} />
+            </div>
+          </button>
         </div>
       </div>
+
 
       {/* Safety and Verification Banner */}
       <div className="bg-[#e2dfff]/40 rounded-3xl p-4 border border-[#eaedff] flex flex-col gap-2">

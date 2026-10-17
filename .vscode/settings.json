@@ -1,0 +1,11 @@
+{
+  "git.path": "C:\\Users\\Angela\\Downloads\\PortableGit\\cmd\\git.exe",
+  "git.enabled": true,
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true,
+  "git.terminalAuthentication": true,
+  "terminal.integrated.env.windows": {
+    "PATH": "${env:PATH};C:\\Users\\Angela\\Downloads\\PortableGit\\cmd;C:\\Users\\Angela\\Downloads\\PortableGit\\ucrt64\\bin"
+  }
+}

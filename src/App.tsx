@@ -244,24 +244,66 @@ function CampusApp() {
   // Interacciones: Feed protegidas con guard de invitado
   const handleToggleLike = (postId: string) => {
     requireAuthAction(() => {
+      const currentUserId = user?.id || 'guest';
       let nextLiked = false;
       let nextLikes = 0;
       setPosts((prev) =>
         prev.map((p) => {
           if (p.id === postId) {
-            nextLiked = !p.isLiked;
-            nextLikes = nextLiked ? p.likes + 1 : p.likes - 1;
+            const currentLikedBy = p.likedBy || [];
+            const isAlreadyLiked = currentLikedBy.includes(currentUserId) || Boolean(p.isLiked);
+            nextLiked = !isAlreadyLiked;
+            const updatedLikedBy = nextLiked
+              ? [...currentLikedBy.filter((id) => id !== currentUserId), currentUserId]
+              : currentLikedBy.filter((id) => id !== currentUserId);
+            nextLikes = nextLiked
+              ? (isAlreadyLiked ? p.likes : p.likes + 1)
+              : (isAlreadyLiked ? Math.max(0, p.likes - 1) : p.likes);
+
             return {
               ...p,
               isLiked: nextLiked,
               likes: nextLikes,
+              likedBy: updatedLikedBy,
             };
           }
           return p;
         })
       );
-      supabaseDataService.toggleLikePost(postId, user?.id || 'guest', nextLiked, nextLikes);
+      supabaseDataService.toggleLikePost(postId, currentUserId, nextLiked, nextLikes);
     }, 'dar me gusta a publicaciones');
+  };
+
+  const handleAddComment = (postId: string, text: string) => {
+    requireAuthAction(() => {
+      if (!text.trim()) return;
+      const newComment = {
+        id: `c-${Date.now()}`,
+        authorId: user?.id || 'guest',
+        authorName: profile?.full_name || user?.email || 'Estudiante',
+        authorAvatar:
+          profile?.avatar_url ||
+          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+        text: text.trim(),
+        createdAt: 'Ahora',
+      };
+
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id === postId) {
+            const updatedCommentsList = [...(p.commentsList || []), newComment];
+            return {
+              ...p,
+              commentsList: updatedCommentsList,
+              comments: updatedCommentsList.length,
+            };
+          }
+          return p;
+        })
+      );
+      supabaseDataService.addCommentToPost(postId, newComment);
+      showToast('Comentario publicado');
+    }, 'comentar publicaciones');
   };
 
   const handleToggleSave = (postId: string) => {
@@ -570,7 +612,9 @@ function CampusApp() {
                 <FeedScreen
                   posts={posts}
                   stories={stories}
+                  currentUserId={user?.id}
                   onToggleLike={handleToggleLike}
+                  onAddComment={handleAddComment}
                   onToggleSave={handleToggleSave}
                   onVotePoll={handleVotePoll}
                   onToggleEventRsvp={handleToggleEventRsvp}

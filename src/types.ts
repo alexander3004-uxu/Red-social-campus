@@ -10,6 +10,15 @@ export interface Story {
   timeAgo: string;
 }
 
+export interface Comment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  text: string;
+  createdAt: string;
+}
+
 export interface PollOption {
   id: string;
   text: string;
@@ -52,6 +61,8 @@ export interface Post {
   likes: number;
   comments: number;
   shares: number;
+  likedBy?: string[];
+  commentsList?: Comment[];
   isLiked?: boolean;
   isSaved?: boolean;
 }

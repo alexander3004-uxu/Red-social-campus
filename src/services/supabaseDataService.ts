@@ -8,7 +8,7 @@
  *   para que los alumnos construyan las tablas y su lógica de persistencia.
  */
 
-import { Post, Story, MarketItem, CommunityGroup, ChatThread } from '../types';
+import { Post, Story, MarketItem, CommunityGroup, ChatThread, Comment } from '../types';
 import {
   INITIAL_POSTS,
   STORIES,
@@ -33,6 +33,11 @@ export const supabaseDataService = {
 
   async toggleLikePost(_postId: string, _userId: string, _nextLiked: boolean, _nextLikes: number): Promise<void> {
     // Espacio para que los estudiantes registren los likes en Supabase
+  },
+
+  async addCommentToPost(_postId: string, _comment: Comment): Promise<boolean> {
+    // Espacio para que los estudiantes registren comentarios en Supabase
+    return true;
   },
 
   async toggleSavePost(_postId: string, _userId: string, _nextSaved: boolean): Promise<void> {

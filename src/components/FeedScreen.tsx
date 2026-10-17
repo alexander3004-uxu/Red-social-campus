@@ -4,7 +4,9 @@ import { CURRENT_USER } from '../data/mockData';
 
 interface FeedScreenProps {
   posts: Post[];
+  currentUserId?: string;
   onToggleLike: (postId: string) => void;
+  onAddComment: (postId: string, text: string) => void;
   onToggleSave: (postId: string) => void;
   onVotePoll: (postId: string, optionId: string) => void;
   onToggleEventRsvp: (postId: string) => void;
@@ -16,7 +18,9 @@ interface FeedScreenProps {
 
 export const FeedScreen: React.FC<FeedScreenProps> = ({
   posts,
+  currentUserId,
   onToggleLike,
+  onAddComment,
   onToggleSave,
   onVotePoll,
   onToggleEventRsvp,
@@ -456,23 +460,30 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
             <div className="flex items-center justify-between pt-1 border-t border-[#f2f3ff]">
               <div className="flex items-center gap-4">
                 {/* Like Button */}
-                <button
-                  onClick={() => onToggleLike(post.id)}
-                  className={`flex items-center gap-1.5 text-xs font-bold transition-all active:scale-95 ${
-                    post.isLiked ? 'text-[#ba1a1a]' : 'text-[#464555] hover:text-[#ba1a1a]'
-                  }`}
-                  type="button"
-                >
-                  <span
-                    className="material-symbols-outlined text-[20px]"
-                    style={{
-                      fontVariationSettings: post.isLiked ? "'FILL' 1" : "'FILL' 0",
-                    }}
-                  >
-                    favorite
-                  </span>
-                  <span>{post.likes}</span>
-                </button>
+                {(() => {
+                  const isUserLiked = Boolean(
+                    post.isLiked || (currentUserId && post.likedBy?.includes(currentUserId))
+                  );
+                  return (
+                    <button
+                      onClick={() => onToggleLike(post.id)}
+                      className={`flex items-center gap-1.5 text-xs font-bold transition-all active:scale-95 ${
+                        isUserLiked ? 'text-[#ba1a1a]' : 'text-[#464555] hover:text-[#ba1a1a]'
+                      }`}
+                      type="button"
+                    >
+                      <span
+                        className="material-symbols-outlined text-[20px]"
+                        style={{
+                          fontVariationSettings: isUserLiked ? "'FILL' 1" : "'FILL' 0",
+                        }}
+                      >
+                        favorite
+                      </span>
+                      <span>{post.likes}</span>
+                    </button>
+                  );
+                })()}
 
                 {/* Comment Button */}
                 <button
@@ -519,29 +530,68 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
               </button>
             </div>
 
-            {/* Inline Comment Box when open */}
+            {/* Inline Comment Section when open */}
             {commentOpenPostId === post.id && (
-              <div className="pt-2 flex items-center gap-2 border-t border-[#f2f3ff] mt-1">
-                <input
-                  type="text"
-                  placeholder="Escribe una respuesta académica..."
-                  value={newCommentText}
-                  onChange={(e) => setNewCommentText(e.target.value)}
-                  className="flex-1 bg-[#f2f3ff] px-3 py-2 rounded-xl text-xs outline-none focus:bg-white focus:ring-1 focus:ring-[#3525cd]"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (newCommentText.trim()) {
-                      alert(`Comentario enviado: "${newCommentText}"`);
-                      setNewCommentText('');
-                      setCommentOpenPostId(null);
-                    }
-                  }}
-                  className="px-3 py-2 rounded-xl bg-[#3525cd] text-white text-xs font-bold"
-                >
-                  Enviar
-                </button>
+              <div className="pt-2 flex flex-col gap-3 border-t border-[#f2f3ff] mt-1">
+                {/* List of existing comments */}
+                {post.commentsList && post.commentsList.length > 0 && (
+                  <div className="flex flex-col gap-2 max-h-48 overflow-y-auto no-scrollbar pr-1">
+                    {post.commentsList.map((c) => (
+                      <div
+                        key={c.id}
+                        className="bg-[#f8f9ff] p-2.5 rounded-xl border border-[#e8ecff] flex gap-2.5 items-start"
+                      >
+                        <img
+                          src={c.authorAvatar}
+                          alt={c.authorName}
+                          className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5"
+                        />
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[11px] font-bold text-[#131b2e] truncate">
+                              {c.authorName}
+                            </span>
+                            <span className="text-[10px] text-[#464555] font-normal shrink-0">
+                              {c.createdAt}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[#283044] leading-normal break-words mt-0.5">
+                            {c.text}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Comment input form */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Escribe una respuesta académica..."
+                    value={newCommentText}
+                    onChange={(e) => setNewCommentText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newCommentText.trim()) {
+                        onAddComment(post.id, newCommentText);
+                        setNewCommentText('');
+                      }
+                    }}
+                    className="flex-1 bg-[#f2f3ff] px-3 py-2 rounded-xl text-xs outline-none focus:bg-white focus:ring-1 focus:ring-[#3525cd]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newCommentText.trim()) {
+                        onAddComment(post.id, newCommentText);
+                        setNewCommentText('');
+                      }
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-[#3525cd] text-white text-xs font-bold hover:bg-[#4f46e5] transition-colors"
+                  >
+                    Enviar
+                  </button>
+                </div>
               </div>
             )}
           </article>

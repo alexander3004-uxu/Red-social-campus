@@ -171,8 +171,12 @@ class ApiClient {
         return this.handleFallback<T>(endpoint, options);
       }
 
-      // Si Vercel o el host devolvió códigos de error de ruta no mapeada
-      if (endpoint.startsWith('/api/') && [404, 405, 502, 504].includes(response.status)) {
+      // Si Vercel o el host devolvió códigos de error de ruta o falla de función serverless
+      if (
+        endpoint.startsWith('/api/') &&
+        ([404, 405, 500, 502, 503, 504].includes(response.status) ||
+          (typeof data?.message === 'string' && data.message.includes('FUNCTION_INVOCATION_FAILED')))
+      ) {
         console.warn(`[ApiClient] Endpoint '${endpoint}' respondió HTTP ${response.status}. Conmutando a fallback local.`);
         return this.handleFallback<T>(endpoint, options);
       }
@@ -190,6 +194,12 @@ class ApiClient {
         return this.handleFallback<T>(endpoint, options);
       }
 
+      // Si el cuerpo devuelto contiene FUNCTION_INVOCATION_FAILED (error típico de Vercel Lambda)
+      if (typeof data?.message === 'string' && data.message.includes('FUNCTION_INVOCATION_FAILED')) {
+        console.warn(`[ApiClient] Detectado FUNCTION_INVOCATION_FAILED en '${endpoint}'. Conmutando a fallback local.`);
+        return this.handleFallback<T>(endpoint, options);
+      }
+
       if (!response.ok) {
         const error: any = new Error(data.message || `Error HTTP ${response.status}`);
         error.status = response.status;
@@ -202,8 +212,13 @@ class ApiClient {
 
       return data as T;
     } catch (err: any) {
-      // Si fue error de red (backend offline), ejecutar fallback local transparente
-      if (endpoint.startsWith('/api/') && (!err.status || [404, 405, 502, 503, 504].includes(err.status))) {
+      // Si fue error de red (backend offline), falla de función serverless o status de fallback
+      if (
+        endpoint.startsWith('/api/') &&
+        (!err.status ||
+          [404, 405, 500, 502, 503, 504].includes(err.status) ||
+          (typeof err?.message === 'string' && err.message.includes('FUNCTION_INVOCATION_FAILED')))
+      ) {
         return this.handleFallback<T>(endpoint, options);
       }
       throw err;

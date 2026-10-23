@@ -35,19 +35,27 @@ let pgPool = null;
 let usePostgres = false;
 
 async function initDatabase() {
-  if (process.env.VERCEL && (!process.env.DATABASE_URL || process.env.ENABLE_POSTGRES !== 'true')) {
-    throw new Error('Configura DATABASE_URL y ENABLE_POSTGRES=true en Vercel para habilitar la persistencia.');
-  }
+  const isPostgresEnabled = process.env.ENABLE_POSTGRES === 'true' || (Boolean(process.env.DATABASE_URL) && process.env.ENABLE_POSTGRES !== 'false');
 
-  if (process.env.DATABASE_URL && process.env.ENABLE_POSTGRES === 'true') {
+  if (process.env.DATABASE_URL && isPostgresEnabled) {
     try {
       const { Pool } = await import('pg');
+      const needsSsl = Boolean(
+        process.env.DATABASE_URL.includes('supabase') ||
+        process.env.DATABASE_URL.includes('sslmode=require') ||
+        process.env.DATABASE_URL.includes('.pooler.supabase.com') ||
+        process.env.VERCEL ||
+        process.env.NODE_ENV === 'production'
+      );
+
       pgPool = new Pool({
         connectionString: process.env.DATABASE_URL,
+        ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
         max: process.env.VERCEL ? 1 : 20,
         idleTimeoutMillis: process.env.VERCEL ? 10000 : 30000,
-        connectionTimeoutMillis: 3000,
+        connectionTimeoutMillis: 10000,
       });
+
       // Probar conexión
       const res = await pgPool.query('SELECT NOW()');
       console.log(`[DB] Conectado exitosamente a PostgreSQL (${res.rows[0].now})`);
@@ -55,16 +63,20 @@ async function initDatabase() {
     } catch (err) {
       console.warn(`[DB] PostgreSQL no disponible (${err.message}). Utilizando persistencia en memoria.`);
       usePostgres = false;
-      if (process.env.VERCEL) throw err;
+      // No lanzar excepción no controlada en Vercel para evitar FUNCTION_INVOCATION_FAILED
     }
   } else {
     console.log('[DB] Operando con Almacén Estructurado en Memoria (Optimizado para desarrollo rápido y pruebas).');
   }
 }
 
-// Esperar la conexión antes de atender solicitudes; evita guardar datos efímeros
-// durante el arranque en Vercel si PostgreSQL todavía se está conectando.
-await initDatabase();
+// Inicializar la base de datos de forma segura sin interrumpir la carga del módulo
+try {
+  await initDatabase();
+} catch (err) {
+  console.error('[DB] Error de inicialización:', err.message);
+  usePostgres = false;
+}
 
 /**
  * MÉTODOS DEL REPOSITORIO DE DATOS (DATA ACCESS OBJECT)

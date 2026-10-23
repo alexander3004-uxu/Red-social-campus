@@ -9,6 +9,10 @@
 
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import dotenv from 'dotenv';
+
+// Cargar variables de entorno inmediatamente para la capa de persistencia
+dotenv.config();
 
 // Semilla con hash bcrypt precalculado (10 salt rounds) para contraseña por defecto 'campus2026!'
 const DEFAULT_PASSWORD_HASH = bcrypt.hashSync('campus2026!', 10);
@@ -109,35 +113,85 @@ const inMemoryStore = {
   user_sessions: [],
 };
 
-// Conexión dinámica a PostgreSQL si pg estuviera instalado y configurado
+// Conexión a Supabase PostgreSQL con fallback automático a memoria local (MemDB)
 let pgPool = null;
 let usePostgres = false;
 
+/**
+ * Valida si la URL de conexión de base de datos está configurada con credenciales reales
+ */
+function isConfiguredDatabaseUrl(url) {
+  if (!url) return false;
+  const isTemplate = url.includes('TU-PROJECT-REF') || 
+                     url.includes('[TU-PASSWORD]') || 
+                     url.includes('TU_PROYECTO') ||
+                     url.includes('xxxxxxxxxxxx');
+  return !isTemplate && (url.startsWith('postgres://') || url.startsWith('postgresql://'));
+}
+
 async function initDatabase() {
-  if (process.env.DATABASE_URL && process.env.ENABLE_POSTGRES === 'true') {
+  const databaseUrl = process.env.DATABASE_URL;
+  // Habilitado por defecto si existe DATABASE_URL válida a menos que ENABLE_POSTGRES sea 'false'
+  const isEnabled = process.env.ENABLE_POSTGRES !== 'false';
+
+  if (isConfiguredDatabaseUrl(databaseUrl) && isEnabled) {
     try {
       const { Pool } = await import('pg');
+
+      // Configuración de conexión optimizada para Supabase (Transaction Pooler o Session Pooler)
+      // SSL con rejectUnauthorized: false es requerido para conexiones seguras en Supabase
+      const isLocal = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
+      const ssl = isLocal ? false : { rejectUnauthorized: false };
+
       pgPool = new Pool({
-        connectionString: process.env.DATABASE_URL,
+        connectionString: databaseUrl,
+        ssl,
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 3000,
+        connectionTimeoutMillis: 5000,
       });
-      // Probar conexión
-      const res = await pgPool.query('SELECT NOW()');
-      console.log(`[DB] Conectado exitosamente a PostgreSQL (${res.rows[0].now})`);
+
+      // Manejador de eventos de error en el pool para evitar caídas del proceso Express
+      pgPool.on('error', (err) => {
+        console.warn('[Database] Error inesperado en el pool de conexiones PostgreSQL:', err.message);
+      });
+
+      // Smoke Test: consulta de verificación (SELECT NOW();)
+      await pgPool.query('SELECT NOW()');
+      console.log('[Database] Conectado exitosamente a Supabase PostgreSQL');
       usePostgres = true;
     } catch (err) {
-      console.warn(`[DB] PostgreSQL no disponible (${err.message}). Utilizando persistencia en memoria.`);
+      console.warn(`[Database] PostgreSQL / Supabase no disponible (${err.message}). Utilizando persistencia en memoria.`);
+      if (pgPool) {
+        try { await pgPool.end(); } catch (_) {}
+      }
+      pgPool = null;
       usePostgres = false;
     }
   } else {
-    console.log('[DB] Operando con Almacén Estructurado en Memoria (Optimizado para desarrollo rápido y pruebas).');
+    console.log('[Database] Operando con Almacén Estructurado en Memoria (Optimizado para desarrollo rápido y pruebas).');
+    usePostgres = false;
   }
 }
 
-// Inicializar de forma asíncrona
-initDatabase().catch((err) => console.error('[DB] Error de inicialización:', err));
+// Inicializar de forma asíncrona al cargar el módulo
+initDatabase().catch((err) => console.error('[Database] Error de inicialización:', err));
+
+/**
+ * Ejecutor seguro de consultas en PostgreSQL / Supabase.
+ * Si la consulta falla por red, desconexión del pool o error SQL,
+ * registra la advertencia y conmuta fluidamente al almacén en memoria sin botar el servidor.
+ */
+async function safePgQuery(queryFn, methodName = 'query') {
+  if (!usePostgres || !pgPool) return { executed: false };
+  try {
+    const result = await queryFn(pgPool);
+    return { executed: true, result };
+  } catch (err) {
+    console.warn(`[Database] Error en PostgreSQL / Supabase (${methodName}): ${err.message}. Conmutando a memoria.`);
+    return { executed: false, error: err };
+  }
+}
 
 /**
  * MÉTODOS DEL REPOSITORIO DE DATOS (DATA ACCESS OBJECT)
@@ -150,9 +204,12 @@ export const db = {
     if (!email) return null;
     const normalized = email.trim().toLowerCase();
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [normalized]);
-      return res.rows[0] || null;
+    const pg = await safePgQuery(
+      (pool) => pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [normalized]),
+      'findUserByEmail'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0] || null;
     }
 
     const user = inMemoryStore.users.find((u) => u.email.toLowerCase() === normalized);
@@ -165,9 +222,12 @@ export const db = {
   async findUserById(id) {
     if (!id) return null;
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query('SELECT * FROM users WHERE id = $1', [id]);
-      return res.rows[0] || null;
+    const pg = await safePgQuery(
+      (pool) => pool.query('SELECT * FROM users WHERE id = $1', [id]),
+      'findUserById'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0] || null;
     }
 
     const user = inMemoryStore.users.find((u) => u.id === id);
@@ -181,13 +241,17 @@ export const db = {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query(
-        `INSERT INTO users (id, email, password_hash, role, is_verified, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $6) RETURNING *`,
-        [id, email.trim().toLowerCase(), password_hash, role, is_verified, now]
-      );
-      return res.rows[0];
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          `INSERT INTO users (id, email, password_hash, role, is_verified, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $6) RETURNING *`,
+          [id, email.trim().toLowerCase(), password_hash, role, is_verified, now]
+        ),
+      'createUser'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0];
     }
 
     const newUser = {
@@ -211,12 +275,16 @@ export const db = {
   async updateUserPassword(userId, password_hash) {
     const now = new Date().toISOString();
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query(
-        'UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3 RETURNING *',
-        [password_hash, now, userId]
-      );
-      return res.rows[0] || null;
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          'UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3 RETURNING *',
+          [password_hash, now, userId]
+        ),
+      'updateUserPassword'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0] || null;
     }
 
     const user = inMemoryStore.users.find((u) => u.id === userId);
@@ -231,12 +299,17 @@ export const db = {
    */
   async verifyUser(userId) {
     const now = new Date().toISOString();
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query(
-        'UPDATE users SET is_verified = TRUE, updated_at = $1 WHERE id = $2 RETURNING *',
-        [now, userId]
-      );
-      return res.rows[0] || null;
+
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          'UPDATE users SET is_verified = TRUE, updated_at = $1 WHERE id = $2 RETURNING *',
+          [now, userId]
+        ),
+      'verifyUser'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0] || null;
     }
 
     const user = inMemoryStore.users.find((u) => u.id === userId);
@@ -252,12 +325,16 @@ export const db = {
    * Buscar proveedor de autenticación vinculado (Google, Microsoft)
    */
   async findAuthProvider(provider, provider_user_id) {
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query(
-        'SELECT * FROM auth_providers WHERE provider = $1 AND provider_user_id = $2',
-        [provider, provider_user_id]
-      );
-      return res.rows[0] || null;
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          'SELECT * FROM auth_providers WHERE provider = $1 AND provider_user_id = $2',
+          [provider, provider_user_id]
+        ),
+      'findAuthProvider'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0] || null;
     }
 
     const match = inMemoryStore.auth_providers.find(
@@ -273,15 +350,19 @@ export const db = {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query(
-        `INSERT INTO auth_providers (id, user_id, provider, provider_user_id, email, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (provider, provider_user_id) DO UPDATE SET metadata = $6
-         RETURNING *`,
-        [id, user_id, provider, provider_user_id, email.toLowerCase(), JSON.stringify(metadata), now]
-      );
-      return res.rows[0];
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          `INSERT INTO auth_providers (id, user_id, provider, provider_user_id, email, metadata, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (provider, provider_user_id) DO UPDATE SET metadata = $6
+           RETURNING *`,
+          [id, user_id, provider, provider_user_id, email.toLowerCase(), JSON.stringify(metadata), now]
+        ),
+      'linkAuthProvider'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0];
     }
 
     const existingIndex = inMemoryStore.auth_providers.findIndex(
@@ -312,9 +393,12 @@ export const db = {
   async findProfileByUserId(userId) {
     if (!userId) return null;
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query('SELECT * FROM profiles WHERE user_id = $1', [userId]);
-      return res.rows[0] || null;
+    const pg = await safePgQuery(
+      (pool) => pool.query('SELECT * FROM profiles WHERE user_id = $1', [userId]),
+      'findProfileByUserId'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0] || null;
     }
 
     const profile = inMemoryStore.profiles.find((p) => p.user_id === userId);
@@ -328,9 +412,12 @@ export const db = {
     if (!username) return null;
     const clean = username.replace(/^@/, '').toLowerCase().trim();
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query('SELECT * FROM profiles WHERE LOWER(username) = LOWER($1)', [clean]);
-      return res.rows[0] || null;
+    const pg = await safePgQuery(
+      (pool) => pool.query('SELECT * FROM profiles WHERE LOWER(username) = LOWER($1)', [clean]),
+      'findProfileByUsername'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0] || null;
     }
 
     const profile = inMemoryStore.profiles.find((p) => p.username.toLowerCase() === clean);
@@ -367,18 +454,22 @@ export const db = {
       updated_at: now,
     };
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query(
-        `INSERT INTO profiles (id, user_id, username, full_name, bio, avatar_url, banner_url, university, faculty, career, semester, student_id, reputation, social_links, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15) RETURNING *`,
-        [
-          record.id, record.user_id, record.username, record.full_name, record.bio,
-          record.avatar_url, record.banner_url, record.university, record.faculty,
-          record.career, record.semester, record.student_id, record.reputation,
-          JSON.stringify(record.social_links), now,
-        ]
-      );
-      return res.rows[0];
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          `INSERT INTO profiles (id, user_id, username, full_name, bio, avatar_url, banner_url, university, faculty, career, semester, student_id, reputation, social_links, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15) RETURNING *`,
+          [
+            record.id, record.user_id, record.username, record.full_name, record.bio,
+            record.avatar_url, record.banner_url, record.university, record.faculty,
+            record.career, record.semester, record.student_id, record.reputation,
+            JSON.stringify(record.social_links), now,
+          ]
+        ),
+      'createProfile'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0];
     }
 
     inMemoryStore.profiles.push(record);
@@ -391,36 +482,35 @@ export const db = {
   async updateProfile(userId, patchData) {
     const now = new Date().toISOString();
 
-    if (usePostgres && pgPool) {
-      // Construcción dinámica de UPDATE
-      const allowedFields = [
-        'username', 'full_name', 'bio', 'avatar_url', 'banner_url',
-        'university', 'faculty', 'career', 'semester', 'student_id', 'social_links'
-      ];
-      const updates = [];
-      const values = [];
-      let idx = 1;
+    const allowedFields = [
+      'username', 'full_name', 'bio', 'avatar_url', 'banner_url',
+      'university', 'faculty', 'career', 'semester', 'student_id', 'social_links'
+    ];
+    const updates = [];
+    const values = [];
+    let idx = 1;
 
-      for (const field of allowedFields) {
-        if (patchData[field] !== undefined) {
-          updates.push(`${field} = $${idx}`);
-          values.push(field === 'social_links' ? JSON.stringify(patchData[field]) : patchData[field]);
-          idx++;
-        }
+    for (const field of allowedFields) {
+      if (patchData[field] !== undefined) {
+        updates.push(`${field} = $${idx}`);
+        values.push(field === 'social_links' ? JSON.stringify(patchData[field]) : patchData[field]);
+        idx++;
       }
+    }
 
-      if (updates.length === 0) {
-        return this.findProfileByUserId(userId);
-      }
-
+    if (updates.length > 0) {
       updates.push(`updated_at = $${idx}`);
       values.push(now);
       idx++;
 
       values.push(userId);
       const query = `UPDATE profiles SET ${updates.join(', ')} WHERE user_id = $${idx} RETURNING *`;
-      const res = await pgPool.query(query, values);
-      return res.rows[0] || null;
+      const pg = await safePgQuery((pool) => pool.query(query, values), 'updateProfile');
+      if (pg.executed) {
+        return pg.result.rows[0] || null;
+      }
+    } else if (usePostgres && pgPool) {
+      return this.findProfileByUserId(userId);
     }
 
     const profileIndex = inMemoryStore.profiles.findIndex((p) => p.user_id === userId);
@@ -468,13 +558,17 @@ export const db = {
       revoked_at: null,
     };
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query(
-        `INSERT INTO user_sessions (id, user_id, token_hash, is_guest, guest_session_id, user_agent, ip_address, expires_at, created_at, revoked)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE) RETURNING *`,
-        [id, user_id, token_hash, is_guest, guest_session_id, user_agent, ip_address, record.expires_at, now]
-      );
-      return res.rows[0];
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          `INSERT INTO user_sessions (id, user_id, token_hash, is_guest, guest_session_id, user_agent, ip_address, expires_at, created_at, revoked)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE) RETURNING *`,
+          [id, user_id, token_hash, is_guest, guest_session_id, user_agent, ip_address, record.expires_at, now]
+        ),
+      'createSession'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0];
     }
 
     inMemoryStore.user_sessions.push(record);
@@ -487,12 +581,16 @@ export const db = {
   async findValidSession(token_hash) {
     const now = new Date();
 
-    if (usePostgres && pgPool) {
-      const res = await pgPool.query(
-        'SELECT * FROM user_sessions WHERE token_hash = $1 AND revoked = FALSE AND expires_at > NOW()',
-        [token_hash]
-      );
-      return res.rows[0] || null;
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          'SELECT * FROM user_sessions WHERE token_hash = $1 AND revoked = FALSE AND expires_at > NOW()',
+          [token_hash]
+        ),
+      'findValidSession'
+    );
+    if (pg.executed) {
+      return pg.result.rows[0] || null;
     }
 
     const session = inMemoryStore.user_sessions.find(
@@ -507,11 +605,15 @@ export const db = {
   async revokeSession(token_hash) {
     const now = new Date().toISOString();
 
-    if (usePostgres && pgPool) {
-      await pgPool.query(
-        'UPDATE user_sessions SET revoked = TRUE, revoked_at = $1 WHERE token_hash = $2',
-        [now, token_hash]
-      );
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          'UPDATE user_sessions SET revoked = TRUE, revoked_at = $1 WHERE token_hash = $2',
+          [now, token_hash]
+        ),
+      'revokeSession'
+    );
+    if (pg.executed) {
       return true;
     }
 
@@ -529,11 +631,15 @@ export const db = {
   async revokeAllUserSessions(userId) {
     const now = new Date().toISOString();
 
-    if (usePostgres && pgPool) {
-      await pgPool.query(
-        'UPDATE user_sessions SET revoked = TRUE, revoked_at = $1 WHERE user_id = $2',
-        [now, userId]
-      );
+    const pg = await safePgQuery(
+      (pool) =>
+        pool.query(
+          'UPDATE user_sessions SET revoked = TRUE, revoked_at = $1 WHERE user_id = $2',
+          [now, userId]
+        ),
+      'revokeAllUserSessions'
+    );
+    if (pg.executed) {
       return true;
     }
 

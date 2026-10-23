@@ -1,47 +1,53 @@
 import React, { useState } from 'react';
 import { Post } from '../types';
-import { CURRENT_USER } from '../data/mockData';
 
 interface CreatePostModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialType?: 'text' | 'pdf' | 'poll' | 'photo';
-  onAddPost: (newPost: Post) => void;
+  authorName: string;
+  authorAvatar?: string;
+  authorTag?: string;
+  onAddPost: (newPost: Post) => void | Promise<void>;
 }
 
 export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   isOpen,
   onClose,
   initialType = 'text',
+  authorName,
+  authorAvatar,
+  authorTag,
   onAddPost,
 }) => {
   const [content, setContent] = useState('');
-  const [tag, setTag] = useState('#Ingeniería');
+  const [tag, setTag] = useState('');
   const [hasPdf, setHasPdf] = useState(initialType === 'pdf');
-  const [pdfName, setPdfName] = useState('Resumen_Laboratorio_Sistemas.pdf');
+  const [pdfName, setPdfName] = useState('');
   const [hasPoll, setHasPoll] = useState(initialType === 'poll');
-  const [pollQuestion, setPollQuestion] = useState('¿Qué horario prefieren para el grupo de estudio?');
-  const [opt1, setOpt1] = useState('Miércoles 4:00 PM (Aula 302)');
-  const [opt2, setOpt2] = useState('Viernes 2:00 PM (Biblioteca)');
+  const [opt1, setOpt1] = useState('');
+  const [opt2, setOpt2] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState('');
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
 
     const newPost: Post = {
       id: `post-${Date.now()}`,
-      authorName: CURRENT_USER.name,
-      authorAvatar: CURRENT_USER.avatar,
-      authorTag: `${CURRENT_USER.career.split(' ')[0]} • 6to sem`,
+      authorName,
+      authorAvatar: authorAvatar || '',
+      authorTag: authorTag || 'CampusLink',
       authorTagColor: 'bg-[#e2dfff] text-[#3323cc]',
-      verified: true,
+      verified: false,
       timeAgo: 'Justo ahora',
       content: content.trim(),
-      tags: [tag, '#CampusLink'],
-      likes: 1,
-      isLiked: true,
+      tags: tag.trim() ? [tag.trim()] : [],
+      likes: 0,
+      isLiked: false,
       comments: 0,
       shares: 0,
       isSaved: false,
@@ -50,25 +56,33 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             name: pdfName,
             size: '2.4 MB',
             downloads: 1,
-            fileContent: `RESUMEN DE ESTUDIO - ${pdfName}\n\nCreado por ${CURRENT_USER.name}\n\n1. Introducción y definiciones clave\n2. Métodos y casos de uso prácticos\n3. Preguntas frecuentes de examen.`,
+            fileContent: '',
           }
         : undefined,
       poll: hasPoll
         ? {
-            totalVotes: 1,
+            totalVotes: 0,
             timeLeft: 'Quedan 2 días',
-            userVotedOption: 'o1',
+            userVotedOption: undefined,
             options: [
-              { id: 'o1', text: opt1, votes: 1, colorClass: 'bg-primary/15 text-primary' },
+              { id: 'o1', text: opt1, votes: 0, colorClass: 'bg-primary/15 text-primary' },
               { id: 'o2', text: opt2, votes: 0, colorClass: 'bg-primary/15 text-primary' },
             ],
           }
         : undefined,
     };
 
-    onAddPost(newPost);
-    setContent('');
-    onClose();
+    setIsPublishing(true);
+    setPublishError('');
+    try {
+      await onAddPost(newPost);
+      setContent('');
+      onClose();
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : 'No se pudo publicar. Inténtalo de nuevo.');
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   return (
@@ -93,15 +107,17 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-4 flex flex-col gap-3">
           <div className="flex items-center gap-2.5">
-            <img
-              src={CURRENT_USER.avatar}
-              alt="Avatar"
-              className="w-9 h-9 rounded-full object-cover"
-            />
+            {authorAvatar ? (
+              <img src={authorAvatar} alt="Avatar" className="w-9 h-9 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e2dfff] text-sm font-bold text-[#3323cc]">
+                {authorName.slice(0, 1).toUpperCase()}
+              </div>
+            )}
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-[#131b2e]">{CURRENT_USER.name}</span>
+              <span className="text-xs font-bold text-[#131b2e]">{authorName}</span>
               <span className="text-[10px] text-[#3525cd] font-semibold">
-                Visible para todo el campus
+                Visible para la comunidad
               </span>
             </div>
           </div>
@@ -182,7 +198,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               onChange={(e) => setTag(e.target.value)}
               className="bg-[#eaedff] text-[#3525cd] text-xs font-bold px-2.5 py-1.5 rounded-lg outline-none"
             >
-              <option value="#Ingeniería">#Ingeniería</option>
+                <option value="">Sin etiqueta</option>
+                <option value="#Ingeniería">#Ingeniería</option>
               <option value="#Medicina">#Medicina</option>
               <option value="#Examenes">#Examenes</option>
               <option value="#Tutorias">#Tutorias</option>
@@ -191,11 +208,13 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
 
             <button
               type="submit"
+              disabled={isPublishing}
               className="px-5 py-2.5 rounded-xl bg-[#3525cd] text-white text-xs font-bold hover:bg-[#4f46e5] active:scale-95 transition-transform"
             >
-              Publicar
+              {isPublishing ? 'Publicando…' : 'Publicar'}
             </button>
           </div>
+          {publishError && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{publishError}</p>}
         </form>
       </div>
     </div>

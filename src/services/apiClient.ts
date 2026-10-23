@@ -220,6 +220,10 @@ class ApiClient {
 
     const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
 
+    if (endpoint.startsWith('/api/social/')) {
+      throw new Error('No se pudo conectar con la red social. Revisa que el servidor y la base de datos estén disponibles.');
+    }
+
     // 1. REGISTRO TRADICIONAL
     if (endpoint === '/api/auth/register' && options.method === 'POST') {
       const { email, password, full_name, username, university, faculty, career, semester } = body;
@@ -502,6 +506,28 @@ class ApiClient {
 
     changePassword: (payload: { currentPassword: string; newPassword: string }) =>
       this.request('/api/users/change-password', { method: 'POST', body: JSON.stringify(payload) }),
+  };
+
+  public social = {
+    fetchPosts: () => this.request('/api/social/posts', { method: 'GET' }),
+
+    createPost: (post: Record<string, any>) =>
+      this.request('/api/social/posts', { method: 'POST', body: JSON.stringify(post) }),
+
+    setPostLike: (postId: string, liked: boolean) =>
+      this.request(`/api/social/posts/${encodeURIComponent(postId)}/like`, {
+        method: 'PATCH',
+        body: JSON.stringify({ liked }),
+      }),
+
+    searchPeople: (query = '') =>
+      this.request(`/api/social/people?q=${encodeURIComponent(query)}`, { method: 'GET' }),
+
+    followPerson: (userId: string) =>
+      this.request(`/api/social/people/${encodeURIComponent(userId)}/follow`, { method: 'POST' }),
+
+    unfollowPerson: (userId: string) =>
+      this.request(`/api/social/people/${encodeURIComponent(userId)}/follow`, { method: 'DELETE' }),
   };
 }
 

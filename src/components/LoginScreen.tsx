@@ -130,7 +130,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
         <span className="material-symbols-outlined text-[20px]">{isDark ? 'light_mode' : 'dark_mode'}</span>
       </button>
 
-      <section className="relative w-full max-w-lg rounded-[2rem] border border-white/80 bg-white/95 p-6 shadow-[0_24px_80px_-32px_rgba(53,37,205,0.35)] backdrop-blur sm:p-9">
+      <section className="login-shell relative grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/80 shadow-[0_24px_80px_-32px_rgba(53,37,205,0.35)] lg:grid-cols-[0.9fr_1.1fr]">
+        <aside className="hidden min-h-[680px] flex-col justify-between bg-gradient-to-br from-[#251a79] via-[#4935c8] to-[#8d59e9] p-10 text-white lg:flex">
+          <div>
+            <div className="mb-16 flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
+                <span className="material-symbols-outlined text-[24px]">school</span>
+              </span>
+              <span className="text-lg font-extrabold tracking-tight">CampusLink</span>
+            </div>
+            <p className="mb-4 text-xs font-bold uppercase tracking-[0.24em] text-violet-200">Una comunidad hecha para ti</p>
+            <h2 className="max-w-md text-4xl font-extrabold leading-[1.12] tracking-tight">Tu vida universitaria, más conectada.</h2>
+            <p className="mt-5 max-w-sm text-sm leading-7 text-violet-100/90">
+              Comparte ideas, encuentra compañeros de carrera y crea vínculos en tu campus.
+            </p>
+          </div>
+          <div className="space-y-3 text-sm font-semibold text-white/95">
+            <p className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px]">forum</span> Conversaciones que sí importan</p>
+            <p className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px]">groups</span> Personas de tu comunidad</p>
+            <p className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px]">auto_awesome</span> Un espacio para crecer juntos</p>
+          </div>
+          <p className="text-xs text-violet-200">CampusLink · Tu campus, tu comunidad</p>
+        </aside>
+        <div className="login-panel p-6 sm:p-10 lg:p-12">
         <header className="mb-7 flex flex-col items-center text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-gradient-to-br from-[#3525cd] to-[#8054e9] text-white shadow-lg shadow-indigo-500/25">
             <span className="material-symbols-outlined text-[28px]">school</span>
@@ -163,11 +185,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className={labelClass} htmlFor="login-email">Correo electrónico</label>
-              <input id="login-email" className={inputClass} type="email" autoComplete="email" placeholder="tu@correo.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
+              <input id="login-email" className={`${inputClass} login-input`} type="email" autoComplete="email" placeholder="tu@correo.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
             </div>
             <div>
               <label className={labelClass} htmlFor="login-password">Contraseña</label>
-              <input id="login-password" className={inputClass} type="password" autoComplete="current-password" placeholder="Tu contraseña" value={password} onChange={(event) => setPassword(event.target.value)} required />
+              <input id="login-password" className={`${inputClass} login-input`} type="password" autoComplete="current-password" placeholder="Tu contraseña" value={password} onChange={(event) => setPassword(event.target.value)} required />
             </div>
             <button disabled={isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-sm font-bold text-white shadow-md shadow-indigo-500/20 transition hover:brightness-105 disabled:opacity-60" type="submit">
               {isLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
@@ -180,19 +202,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
               <label className={labelClass} htmlFor="register-name">Tu nombre</label>
-              <input id="register-name" className={inputClass} autoComplete="name" placeholder="Nombre y apellido" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+              <input id="register-name" className={`${inputClass} login-input`} autoComplete="name" placeholder="Nombre y apellido" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
             </div>
             <div>
               <label className={labelClass} htmlFor="register-email">Correo electrónico</label>
-              <input id="register-email" className={inputClass} type="email" autoComplete="email" placeholder="tu@correo.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
+              <input id="register-email" className={`${inputClass} login-input`} type="email" autoComplete="email" placeholder="tu@correo.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
             </div>
             <div>
               <label className={labelClass} htmlFor="register-password">Crea una contraseña</label>
-              <input id="register-password" className={inputClass} type="password" autoComplete="new-password" minLength={8} placeholder="8+ caracteres, incluye letra y número" value={password} onChange={(event) => setPassword(event.target.value)} required />
+              <input id="register-password" className={`${inputClass} login-input`} type="password" autoComplete="new-password" minLength={8} placeholder="8+ caracteres, incluye letra y número" value={password} onChange={(event) => setPassword(event.target.value)} required />
             </div>
             <div>
               <label className={labelClass} htmlFor="register-confirm-password">Confirma tu contraseña</label>
-              <input id="register-confirm-password" className={inputClass} type="password" autoComplete="new-password" minLength={8} placeholder="Escríbela otra vez" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
+              <input id="register-confirm-password" className={`${inputClass} login-input`} type="password" autoComplete="new-password" minLength={8} placeholder="Escríbela otra vez" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
             </div>
             <button disabled={isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-sm font-bold text-white shadow-md shadow-indigo-500/20 transition hover:brightness-105 disabled:opacity-60" type="submit">
               {isLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
@@ -206,34 +228,34 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass} htmlFor="profile-name">Nombre completo</label>
-                <input id="profile-name" className={inputClass} autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+                <input id="profile-name" className={`${inputClass} login-input`} autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
               </div>
               <div>
                 <label className={labelClass} htmlFor="profile-username">Nombre de usuario</label>
-                <input id="profile-username" className={inputClass} autoComplete="username" placeholder="ej. ana.lopez" value={username} onChange={(event) => setUsername(event.target.value)} required />
+                <input id="profile-username" className={`${inputClass} login-input`} autoComplete="username" placeholder="ej. ana.lopez" value={username} onChange={(event) => setUsername(event.target.value)} required />
               </div>
             </div>
             <div>
               <label className={labelClass} htmlFor="profile-university">Universidad</label>
-              <input id="profile-university" className={inputClass} placeholder="¿Dónde estudias?" value={university} onChange={(event) => setUniversity(event.target.value)} required />
+              <input id="profile-university" className={`${inputClass} login-input`} placeholder="¿Dónde estudias?" value={university} onChange={(event) => setUniversity(event.target.value)} required />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass} htmlFor="profile-faculty">Facultad</label>
-                <input id="profile-faculty" className={inputClass} placeholder="Facultad (opcional)" value={faculty} onChange={(event) => setFaculty(event.target.value)} />
+                <input id="profile-faculty" className={`${inputClass} login-input`} placeholder="Facultad (opcional)" value={faculty} onChange={(event) => setFaculty(event.target.value)} />
               </div>
               <div>
                 <label className={labelClass} htmlFor="profile-career">Carrera</label>
-                <input id="profile-career" className={inputClass} placeholder="Tu carrera" value={career} onChange={(event) => setCareer(event.target.value)} required />
+                <input id="profile-career" className={`${inputClass} login-input`} placeholder="Tu carrera" value={career} onChange={(event) => setCareer(event.target.value)} required />
               </div>
             </div>
             <div>
               <label className={labelClass} htmlFor="profile-semester">Semestre</label>
-              <input id="profile-semester" className={inputClass} placeholder="Ej. 3er semestre (opcional)" value={semester} onChange={(event) => setSemester(event.target.value)} />
+              <input id="profile-semester" className={`${inputClass} login-input`} placeholder="Ej. 3er semestre (opcional)" value={semester} onChange={(event) => setSemester(event.target.value)} />
             </div>
             <div>
               <label className={labelClass} htmlFor="profile-bio">Sobre ti</label>
-              <textarea id="profile-bio" className={`${inputClass} h-24 resize-y py-3`} placeholder="Una breve descripción (opcional)" value={bio} onChange={(event) => setBio(event.target.value)} />
+              <textarea id="profile-bio" className={`${inputClass} login-input h-24 resize-y py-3`} placeholder="Una breve descripción (opcional)" value={bio} onChange={(event) => setBio(event.target.value)} />
             </div>
             <button disabled={isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-sm font-bold text-white shadow-md shadow-indigo-500/20 transition hover:brightness-105 disabled:opacity-60" type="submit">
               {isLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
@@ -244,6 +266,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
 
         {errorMessage && <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</p>}
         <p className="mt-6 text-center text-xs leading-5 text-[#858294]">Tu cuenta se protege con contraseña. No compartas tus credenciales con nadie.</p>
+        </div>
       </section>
     </main>
   );

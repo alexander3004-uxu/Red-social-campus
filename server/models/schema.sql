@@ -63,6 +63,34 @@ CREATE TABLE IF NOT EXISTS profiles (
 ALTER TABLE profiles
     ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Publicaciones compartidas en el feed y relaciones de seguimiento entre cuentas.
+CREATE TABLE IF NOT EXISTS campus_posts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    post_data JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_campus_posts_created_at ON campus_posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_campus_posts_user_created ON campus_posts(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS campus_post_likes (
+    post_id UUID NOT NULL REFERENCES campus_posts(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_follows (
+    follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    followed_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (follower_id, followed_id),
+    CONSTRAINT user_follows_no_self CHECK (follower_id <> followed_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_follows_followed ON user_follows(followed_id, follower_id);
+
 -- ==============================================================================
 -- 4. TABLA DE SESIONES Y REFRESH TOKENS (USER_SESSIONS)
 -- Manejo de tokens de larga duración, invitados y revocación de acceso

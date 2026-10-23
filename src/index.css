@@ -302,4 +302,35 @@ html.dark [data-qr-card] .text-\[\#3525cd\] {
   color: #3525cd !important;
 }
 
+/* Login remains a high-contrast light surface even when the app theme is dark. */
+.login-shell,
+html.dark .login-shell {
+  background: #ffffff !important;
+  color: #211f32 !important;
+}
+
+.login-panel,
+html.dark .login-panel {
+  background: #ffffff !important;
+  color: #211f32 !important;
+}
+
+.login-shell input,
+.login-shell textarea,
+html.dark .login-shell input,
+html.dark .login-shell textarea {
+  background: #ffffff !important;
+  border-color: #e7e4f0 !important;
+  color: #211f32 !important;
+  color-scheme: light;
+}
+
+.login-shell input::placeholder,
+.login-shell textarea::placeholder,
+html.dark .login-shell input::placeholder,
+html.dark .login-shell textarea::placeholder {
+  color: #777487 !important;
+  opacity: 1;
+}
+
 

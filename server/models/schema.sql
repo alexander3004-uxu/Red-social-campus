@@ -55,9 +55,13 @@ CREATE TABLE IF NOT EXISTS profiles (
     student_id VARCHAR(50),                     -- Matrícula o carnet estudiantil
     reputation NUMERIC(3, 1) DEFAULT 5.0,
     social_links JSONB DEFAULT '[]'::jsonb,     -- [{ platform: 'github', url: '...' }]
+    profile_completed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- ==============================================================================
 -- 4. TABLA DE SESIONES Y REFRESH TOKENS (USER_SESSIONS)

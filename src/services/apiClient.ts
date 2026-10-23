@@ -5,11 +5,9 @@
  * - Intenta primero comunicarse con la API de Express (puerto 4000 o Vercel Serverless Function).
  * - Si el backend no está disponible (código 404/405/502 de servidor estático, HTML devuelto o error de red),
  *   conmuta de forma automática y transparente al almacén local persistente (LocalStorage),
- *   asegurando que el registro, login con Google, modo invitado y edición de perfil
- *   funcionen al 100% en cualquier entorno (incluyendo despliegues en Vercel).
+ *   permitiendo el acceso de respaldo en el navegador cuando la API no responde.
+ *   Ese respaldo local no sincroniza cuentas entre dispositivos.
  */
-
-import { CURRENT_USER } from '../data/mockData';
 
 const API_BASE_URL = ((import.meta as any).env?.VITE_API_URL as string) || '';
 
@@ -21,78 +19,36 @@ export interface ApiErrorResponse {
   prompt_upgrade?: boolean;
 }
 
-// Semilla inicial para almacenamiento local
-const DEFAULT_LOCAL_USERS = [
-  {
-    id: 'e9f4c3a2-7104-4e2b-a81f-490326071001',
-    email: 'sofia.valenzuela@ucentral.edu',
-    password: 'campus2026!',
-    role: 'student',
-    is_verified: true,
-    profile: {
-      id: 'prof_sofia_001',
-      user_id: 'e9f4c3a2-7104-4e2b-a81f-490326071001',
-      username: 'sofia.valenzuela',
-      full_name: 'Sofía Valenzuela',
-      bio: CURRENT_USER.bio,
-      avatar_url: CURRENT_USER.avatar,
-      banner_url: CURRENT_USER.banner,
-      university: CURRENT_USER.university,
-      faculty: CURRENT_USER.faculty,
-      career: CURRENT_USER.career,
-      semester: CURRENT_USER.semester,
-      student_id: CURRENT_USER.studentId,
-      reputation: 4.9,
-      social_links: [],
-    },
-  },
-  {
-    id: 'b1c2d3e4-5678-4901-a234-56789abcdef0',
-    email: 'carlos.mendoza@ucentral.edu',
-    password: 'campus2026!',
-    role: 'professor',
-    is_verified: true,
-    profile: {
-      id: 'prof_carlos_002',
-      user_id: 'b1c2d3e4-5678-4901-a234-56789abcdef0',
-      username: 'carlos.mendoza',
-      full_name: 'Dr. Carlos Mendoza',
-      bio: 'Docente Investigador en Inteligencia Artificial y Computación Ubicua.',
-      avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
-      banner_url: CURRENT_USER.banner,
-      university: 'Universidad Central (Sede Principal)',
-      faculty: 'Facultad de Ingeniería',
-      career: 'Ciencias de la Computación',
-      semester: 'Profesor Titular',
-      student_id: 'DOC-2026-88',
-      reputation: 5.0,
-      social_links: [],
-    },
-  },
-  {
-    id: 'c3d4e5f6-7890-4123-b456-789012abcdef',
-    email: 'admin@ucentral.edu',
-    password: 'campus2026!',
-    role: 'admin',
-    is_verified: true,
-    profile: {
-      id: 'prof_admin_003',
-      user_id: 'c3d4e5f6-7890-4123-b456-789012abcdef',
-      username: 'admin.campus',
-      full_name: 'Administración CampusLink',
-      bio: 'Coordinación Central de Servicios Digitales y Seguridad del Campus.',
-      avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=250',
-      banner_url: CURRENT_USER.banner,
-      university: 'Universidad Central (Sede Principal)',
-      faculty: 'Administración General',
-      career: 'Gestión Institucional',
-      semester: 'Administrador',
-      student_id: 'ADM-001',
-      reputation: 5.0,
-      social_links: [],
-    },
-  },
-];
+const LOCAL_DEMO_USER_IDS = new Set([
+  'e9f4c3a2-7104-4e2b-a81f-490326071001',
+  'b1c2d3e4-5678-4901-a234-56789abcdef0',
+  'c3d4e5f6-7890-4123-b456-789012abcdef',
+]);
+
+const LOCAL_PASSWORD_ITERATIONS = 120000;
+
+async function hashLocalPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: LOCAL_PASSWORD_ITERATIONS },
+    key,
+    256,
+  );
+  const toHex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `pbkdf2$${LOCAL_PASSWORD_ITERATIONS}$${toHex(salt)}$${toHex(new Uint8Array(bits))}`;
+}
+
+async function verifyLocalPassword(password: string, encoded: string): Promise<boolean> {
+  const [algorithm, iterationsText, saltHex, expectedHex] = (encoded || '').split('$');
+  const iterations = Number(iterationsText);
+  if (algorithm !== 'pbkdf2' || !Number.isInteger(iterations) || iterations < 1 || iterations > 500000 || !saltHex || !expectedHex) return false;
+  const salt = new Uint8Array(saltHex.match(/.{2}/g)?.map((byte) => parseInt(byte, 16)) || []);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
+  const actualHex = Array.from(new Uint8Array(bits), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return actualHex === expectedHex;
+}
 
 class LocalAuthStore {
   private static USERS_KEY = 'campuslink_db_users';
@@ -101,13 +57,17 @@ class LocalAuthStore {
   public static getUsers(): any[] {
     try {
       const data = localStorage.getItem(this.USERS_KEY);
-      if (!data) {
-        localStorage.setItem(this.USERS_KEY, JSON.stringify(DEFAULT_LOCAL_USERS));
-        return DEFAULT_LOCAL_USERS;
+      if (!data) return [];
+      const users = JSON.parse(data);
+      const cleanUsers = Array.isArray(users) ? users.filter((user) => !LOCAL_DEMO_USER_IDS.has(user.id)) : [];
+      if (cleanUsers.length !== users.length) {
+        this.saveUsers(cleanUsers);
+        const session = this.getSession();
+        if (session?.user?.id && LOCAL_DEMO_USER_IDS.has(session.user.id)) this.setSession(null);
       }
-      return JSON.parse(data);
+      return cleanUsers;
     } catch {
-      return DEFAULT_LOCAL_USERS;
+      return [];
     }
   }
 
@@ -253,9 +213,9 @@ class ApiClient {
   /**
    * Manejador de respaldo en el navegador (Local Client Fallback)
    * Garantiza que en Vercel u entornos sin backend Express activo, el usuario
-   * pueda registrarse, iniciar sesión, ingresar con Google o como invitado de forma inmediata.
+   * pueda registrarse, iniciar sesión o como invitado de forma inmediata.
    */
-  private handleFallback<T>(endpoint: string, options: RequestInit): Promise<T> {
+  private async handleFallback<T>(endpoint: string, options: RequestInit): Promise<T> {
     console.info(`[ApiClient] Utilizando persistencia local de respaldo para: ${endpoint}`);
 
     const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
@@ -278,22 +238,23 @@ class ApiClient {
         user_id: newId,
         username: (username || email.split('@')[0]).replace(/^@/, '').toLowerCase().trim(),
         full_name: full_name || 'Estudiante Universitario',
-        bio: 'Estudiante activo de la comunidad CampusLink.',
-        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-        banner_url: CURRENT_USER.banner,
-        university: university || 'Universidad Central (Sede Principal)',
-        faculty: faculty || 'Facultad de Ingeniería',
-        career: career || 'Ingeniería de Software',
-        semester: semester || '1er Semestre',
+        bio: '',
+        avatar_url: '',
+        banner_url: '',
+        university: university || '',
+        faculty: faculty || '',
+        career: career || '',
+        semester: semester || '',
         student_id: `UC-2026-${Math.floor(10000 + Math.random() * 90000)}`,
         reputation: 5.0,
         social_links: [],
+        profile_completed: false,
       };
 
       const newUser = {
         id: newId,
         email: email.toLowerCase().trim(),
-        password,
+        password_hash: await hashLocalPassword(password),
         role: 'student',
         is_verified: true,
         profile: newProfile,
@@ -304,7 +265,7 @@ class ApiClient {
 
       const token = `local_jwt_${newId}_${Date.now()}`;
       this.setToken(token);
-      LocalAuthStore.setSession({ token, user: newUser, profile: newProfile });
+      LocalAuthStore.setSession({ token, user: { id: newUser.id, email: newUser.email, role: newUser.role, is_verified: true }, profile: newProfile });
 
       return Promise.resolve({
         success: true,
@@ -322,16 +283,26 @@ class ApiClient {
       const users = LocalAuthStore.getUsers();
       const user = users.find((u) => u.email.toLowerCase() === (email || '').toLowerCase().trim());
 
-      if (!user || user.password !== password) {
+      const passwordMatches = user?.password_hash
+        ? await verifyLocalPassword(password, user.password_hash)
+        : Boolean(user?.password && user.password === password);
+      if (!user || !passwordMatches) {
         const err: any = new Error('Correo electrónico o contraseña incorrectos.');
         err.status = 401;
         err.code = 'INVALID_CREDENTIALS';
         return Promise.reject(err);
       }
 
+      // Migra credenciales creadas por versiones anteriores que las guardaban en texto plano.
+      if (user.password) {
+        user.password_hash = await hashLocalPassword(password);
+        delete user.password;
+        LocalAuthStore.saveUsers(users);
+      }
+
       const token = `local_jwt_${user.id}_${Date.now()}`;
       this.setToken(token);
-      LocalAuthStore.setSession({ token, user, profile: user.profile });
+      LocalAuthStore.setSession({ token, user: { id: user.id, email: user.email, role: user.role, is_verified: user.is_verified }, profile: user.profile });
 
       return Promise.resolve({
         success: true,
@@ -339,71 +310,6 @@ class ApiClient {
         message: 'Inicio de sesión exitoso.',
         token,
         user: { id: user.id, email: user.email, role: user.role, is_verified: user.is_verified, isGuest: false },
-        profile: user.profile,
-      } as T);
-    }
-
-    // 3. GOOGLE OAUTH 2.0
-    if (endpoint === '/api/auth/google' && options.method === 'POST') {
-      const { id_token } = body;
-      let email = 'estudiante.google@ucentral.edu';
-      let name = 'Estudiante Google';
-      let picture = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250';
-
-      if (id_token && id_token.includes('.')) {
-        try {
-          const payloadPart = id_token.split('.')[1];
-          const decoded = JSON.parse(atob(payloadPart));
-          if (decoded.email) email = decoded.email;
-          if (decoded.name) name = decoded.name;
-          if (decoded.picture) picture = decoded.picture;
-        } catch {}
-      }
-
-      const users = LocalAuthStore.getUsers();
-      let user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-
-      if (!user) {
-        const newId = `user_google_${Date.now()}`;
-        const cleanUsername = email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '');
-        const newProfile = {
-          id: `prof_${newId}`,
-          user_id: newId,
-          username: cleanUsername,
-          full_name: name,
-          bio: 'Estudiante autenticado vía Google Workspace.',
-          avatar_url: picture,
-          banner_url: CURRENT_USER.banner,
-          university: 'Universidad Central (Sede Principal)',
-          faculty: 'Facultad de Ingeniería',
-          career: 'Ingeniería de Software',
-          semester: '1er Semestre',
-          student_id: `UC-G-${Math.floor(1000 + Math.random() * 9000)}`,
-          reputation: 5.0,
-          social_links: [],
-        };
-
-        user = {
-          id: newId,
-          email: email.toLowerCase(),
-          role: 'student',
-          is_verified: true,
-          profile: newProfile,
-        };
-        users.push(user);
-        LocalAuthStore.saveUsers(users);
-      }
-
-      const token = `local_jwt_google_${user.id}_${Date.now()}`;
-      this.setToken(token);
-      LocalAuthStore.setSession({ token, user, profile: user.profile });
-
-      return Promise.resolve({
-        success: true,
-        code: 'GOOGLE_AUTH_SUCCESS',
-        message: 'Autenticación con Google completada exitosamente.',
-        token,
-        user: { id: user.id, email: user.email, role: 'student', is_verified: true, isGuest: false },
         profile: user.profile,
       } as T);
     }
@@ -503,14 +409,18 @@ class ApiClient {
       const users = LocalAuthStore.getUsers();
       const user = users.find((u) => u.id === session.user.id);
 
-      if (user && user.password && user.password !== currentPassword) {
+      const passwordMatches = user?.password_hash
+        ? await verifyLocalPassword(currentPassword, user.password_hash)
+        : Boolean(user?.password && user.password === currentPassword);
+      if (user && !passwordMatches) {
         const err: any = new Error('La contraseña actual es incorrecta.');
         err.status = 400;
         return Promise.reject(err);
       }
 
       if (user) {
-        user.password = newPassword;
+        user.password_hash = await hashLocalPassword(newPassword);
+        delete user.password;
         LocalAuthStore.saveUsers(users);
       }
 
@@ -560,12 +470,9 @@ class ApiClient {
     login: (payload: { email: string; password: string; rememberMe?: boolean }) =>
       this.request('/api/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
 
-    google: (payload: { id_token: string; guestSessionId?: string }) =>
-      this.request('/api/auth/google', { method: 'POST', body: JSON.stringify(payload) }),
-
     guest: () => this.request('/api/auth/guest', { method: 'POST' }),
 
-    upgradeGuest: (payload: { guestSessionId: string; type: 'google' | 'register'; [key: string]: any }) =>
+    upgradeGuest: (payload: { guestSessionId: string; type: 'register'; [key: string]: any }) =>
       this.request('/api/auth/upgrade-guest', { method: 'POST', body: JSON.stringify(payload) }),
 
     getMe: () => this.request('/api/auth/me', { method: 'GET' }),

@@ -500,26 +500,19 @@ function CampusApp() {
       )}
 
       {/* Enrutamiento de Pantallas */}
-      {currentTab === 'login' || !isAuthenticated ? (
+      {currentTab === 'login' || !isAuthenticated || !profile?.profile_completed ? (
         <LoginScreen
-          onLoginSuccess={() => {
+          onLoginSuccess={(university) => {
+            const campus = university || profile?.university || selectedCampus;
+            setSelectedCampus(campus);
             try {
-              localStorage.setItem('campuslink_user_university', selectedCampus);
+              localStorage.setItem('campuslink_user_university', campus);
               localStorage.setItem('campuslink_university_confirmed', 'true');
             } catch (e) {
               console.warn(e);
             }
             setShowUniversitySelectModal(false);
             setCurrentTab('feed');
-          }}
-          selectedCampus={selectedCampus}
-          onSelectCampus={(camp) => {
-            setSelectedCampus(camp);
-            try {
-              localStorage.setItem('campuslink_user_university', camp);
-            } catch (e) {
-              console.warn(e);
-            }
           }}
         />
       ) : (

@@ -2,7 +2,7 @@
  * server/controllers/auth.controller.js
  * Controlador de Autenticación Integral:
  * - Registro e inicio de sesión tradicional (bcrypt 10 salt rounds)
- * - Autenticación federada con Google OAuth 2.0 y vinculación inteligente de cuentas
+ * - Autenticación por correo electrónico y contraseña
  * - Modo Invitado (Guest Access) con privilegios restringidos
  * - Emisión de JWT y cookies HTTP-only (Secure, SameSite=Lax)
  * - Verificación de sesión y logout
@@ -11,14 +11,10 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { OAuth2Client } from 'google-auth-library';
 import { db } from '../db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'campus_super_secret_jwt_key_2026';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'campus_super_secret_refresh_jwt_key_2026';
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'campus-google-oauth-client-id.apps.googleusercontent.com';
-
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 /**
  * Genera par de tokens (Access Token + Refresh Token) y configura cookies HTTP-only
@@ -184,8 +180,8 @@ export async function login(req, res) {
     if (!user.password_hash) {
       return res.status(400).json({
         success: false,
-        code: 'OAUTH_ACCOUNT',
-        message: 'Esta cuenta fue creada con Google OAuth. Por favor, inicia sesión con Google.',
+        code: 'PASSWORD_NOT_SET',
+        message: 'Esta cuenta aún no tiene una contraseña de acceso. Contacta al administrador para recuperarla.',
       });
     }
 
@@ -229,172 +225,6 @@ export async function login(req, res) {
   }
 }
 
-/**
- * 3. AUTENTICACIÓN FEDERADA CON GOOGLE OAUTH 2.0
- * Verificación del ID token y vinculación automática de cuentas
- */
-export async function googleAuth(req, res) {
-  try {
-    const { id_token, guestSessionId } = req.body;
-
-    if (!id_token) {
-      return res.status(400).json({
-        success: false,
-        code: 'TOKEN_MISSING',
-        message: 'Se requiere el id_token de Google Identity Services.',
-      });
-    }
-
-    let googlePayload = null;
-
-    // Intentar verificación oficial con google-auth-library
-    try {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: id_token,
-        audience: GOOGLE_CLIENT_ID,
-      });
-      googlePayload = ticket.getPayload();
-    } catch (verifyErr) {
-      // Fallback para tokens de prueba / desarrollo si no coincide audience
-      console.warn('[Google Auth] Verificación oficial de audience en modo flexible:', verifyErr.message);
-      try {
-        const decoded = jwt.decode(id_token);
-        if (decoded && typeof decoded === 'object') {
-          googlePayload = decoded;
-        }
-      } catch {}
-
-      if (!googlePayload) {
-        const parts = id_token.split('.');
-        if (parts.length === 3) {
-          try {
-            googlePayload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-          } catch {}
-        }
-      }
-    }
-
-    if (!googlePayload || !googlePayload.email) {
-      return res.status(401).json({
-        success: false,
-        code: 'GOOGLE_TOKEN_INVALID',
-        message: 'No se pudo verificar la autenticidad del token de Google.',
-      });
-    }
-
-    const {
-      sub: googleSub,
-      email,
-      name = 'Estudiante Google',
-      picture = '',
-      email_verified = true,
-    } = googlePayload;
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    // A. Buscar si el proveedor de Google ya está vinculado
-    let linkedProvider = await db.findAuthProvider('google', googleSub);
-    let user = null;
-
-    if (linkedProvider) {
-      user = await db.findUserById(linkedProvider.user_id);
-    }
-
-    // B. Si no está vinculado, verificar si el usuario ya existe por email
-    if (!user) {
-      const existingUser = await db.findUserByEmail(normalizedEmail);
-
-      if (existingUser) {
-        // VINCULACIÓN DE CUENTAS: Asociar Google al usuario existente sin duplicarlo
-        user = existingUser;
-        await db.linkAuthProvider({
-          user_id: user.id,
-          provider: 'google',
-          provider_user_id: googleSub,
-          email: normalizedEmail,
-          metadata: { name, picture },
-        });
-
-        if (!user.is_verified && email_verified) {
-          await db.verifyUser(user.id);
-        }
-        console.log(`[Google Auth] Cuenta vinculada con éxito para: ${normalizedEmail}`);
-      } else {
-        // CREACIÓN DE NUEVA CUENTA FEDERADA
-        user = await db.createUser({
-          email: normalizedEmail,
-          password_hash: null,
-          role: 'student',
-          is_verified: true,
-        });
-
-        await db.linkAuthProvider({
-          user_id: user.id,
-          provider: 'google',
-          provider_user_id: googleSub,
-          email: normalizedEmail,
-          metadata: { name, picture },
-        });
-
-        // Generar username único basado en el correo
-        const baseUsername = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '');
-        let usernameCandidate = baseUsername;
-        let suffix = 1;
-        while (await db.findProfileByUsername(usernameCandidate)) {
-          usernameCandidate = `${baseUsername}_${suffix++}`;
-        }
-
-        await db.createProfile({
-          user_id: user.id,
-          username: usernameCandidate,
-          full_name: name,
-          avatar_url: picture,
-          university: 'Universidad Central (Sede Principal)',
-          faculty: 'Facultad de Ingeniería',
-          career: 'Ingeniería de Software',
-          semester: '1er Semestre',
-        });
-      }
-    }
-
-    // Cargar perfil actualizado
-    const profile = await db.findProfileByUserId(user.id);
-
-    if (guestSessionId) {
-      console.log(`[Google Upgrade] Invitado ${guestSessionId} migrado a Google Account: ${user.id}`);
-    }
-
-    // Emitir sesión y cookies HTTP-only
-    const { accessToken } = issueAuthSession(res, user, profile, false);
-
-    return res.status(200).json({
-      success: true,
-      code: 'GOOGLE_AUTH_SUCCESS',
-      message: 'Autenticación con Google completada exitosamente.',
-      token: accessToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        is_verified: user.is_verified,
-        isGuest: false,
-      },
-      profile,
-    });
-  } catch (error) {
-    console.error('[Auth Controller] Error en googleAuth:', error);
-    return res.status(500).json({
-      success: false,
-      code: 'GOOGLE_AUTH_ERROR',
-      message: 'Fallo al procesar autenticación con Google.',
-    });
-  }
-}
-
-/**
- * 4. MODO INVITADO (GUEST ACCESS)
- * Generación de sesión temporal de solo lectura sin credenciales
- */
 export async function guestLogin(req, res) {
   try {
     const guestSessionId = `guest_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
@@ -465,16 +295,14 @@ export async function upgradeGuest(req, res) {
       });
     }
 
-    if (type === 'google') {
-      return googleAuth(req, res);
-    } else if (type === 'register') {
+    if (type === 'register') {
       return register(req, res);
     }
 
     return res.status(400).json({
       success: false,
       code: 'INVALID_UPGRADE_TYPE',
-      message: "El tipo de conversión debe ser 'register' o 'google'.",
+      message: "El tipo de conversión debe ser 'register'.",
     });
   } catch (error) {
     console.error('[Auth Controller] Error en upgradeGuest:', error);

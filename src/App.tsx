@@ -104,13 +104,14 @@ function CampusApp() {
   useEffect(() => {
     let active = true;
 
-    const refreshPosts = async () => {
+    // Carga inicial de publicaciones
+    const loadPosts = async () => {
       if (!user?.id) return;
       try {
         const result = await apiClient.social.fetchPosts();
         if (active && result?.success) setPosts(Array.isArray(result.posts) ? result.posts : []);
       } catch (e) {
-        console.warn('[Social] No se pudieron actualizar las publicaciones:', e);
+        console.warn('[Social] No se pudieron cargar las publicaciones:', e);
       }
     };
 
@@ -135,8 +136,34 @@ function CampusApp() {
     }
 
     loadData();
-    refreshPosts();
-    const postRefreshTimer = window.setInterval(refreshPosts, 15000);
+    loadPosts();
+
+    // =========================================================================
+    // SUSCRIPCIÓN REALTIME PARA PUBLICACIONES (INSERT / UPDATE / DELETE)
+    // =========================================================================
+    const unsubPosts = supabaseDataService.subscribeToPosts(
+      // INSERT: nueva publicación aparece al instante en el feed
+      (newPost) => {
+        if (!active) return;
+        setPosts((prev) => prev.some((p) => p.id === newPost.id) ? prev : [newPost, ...prev]);
+      },
+      // UPDATE: likes, comentarios, encuestas, eventos se reflejan en tiempo real
+      (updatedPost) => {
+        if (!active) return;
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === updatedPost.id
+              ? { ...p, ...updatedPost, isLiked: p.isLiked, isSaved: p.isSaved }
+              : p
+          )
+        );
+      },
+      // DELETE: publicación eliminada desaparece del feed automáticamente
+      (deletedId) => {
+        if (!active) return;
+        setPosts((prev) => prev.filter((p) => p.id !== deletedId));
+      }
+    );
 
     // Suscripciones Realtime para los demás módulos respaldados por Supabase.
     const unsubStories = supabaseDataService.subscribeToStories(
@@ -186,7 +213,7 @@ function CampusApp() {
 
     return () => {
       active = false;
-      window.clearInterval(postRefreshTimer);
+      unsubPosts();
       unsubStories();
       unsubMarket();
       unsubGroups();

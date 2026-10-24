@@ -1,62 +1,72 @@
-# 🚀 Guía de Configuración de Supabase - Red Social Campus
+# 🚀 Guía Oficial: Autenticación y Cuentas con Supabase
 
-Este proyecto ya está 100% preparado para conectarse a **Supabase** tanto desde el **Frontend (React)** como desde el **Backend (Express / PostgreSQL)**.
-
----
-
-## 📂 Archivos creados y configurados
-
-1. **Frontend Client**: [`src/lib/supabase.ts`](file:///c:/Users/QUANT_CHELSEA/Documents/TRABAJOS%20DE%20UNIVERSIDAD%202026/Red-social-campus/src/lib/supabase.ts)
-   - Cliente oficial `@supabase/supabase-js` para React/Vite.
-   - Incluye helpers para autenticación, verificación de configuración y subida de archivos/imágenes a Supabase Storage.
-
-2. **Backend Service**: [`server/services/supabase.js`](file:///c:/Users/QUANT_CHELSEA/Documents/TRABAJOS%20DE%20UNIVERSIDAD%202026/Red-social-campus/server/services/supabase.js)
-   - Cliente de Supabase para el servidor Node.js/Express con soporte para `service_role` o `anon_key`.
-
-3. **Esquema de Tablas SQL**: [`server/models/schema.sql`](file:///c:/Users/QUANT_CHELSEA/Documents/TRABAJOS%20DE%20UNIVERSIDAD%202026/Red-social-campus/server/models/schema.sql)
-   - Script SQL completo para crear todas las tablas (`users`, `profiles`, `auth_providers`, `user_sessions`).
-
-4. **Variables de Entorno**: [`.env`](file:///c:/Users/QUANT_CHELSEA/Documents/TRABAJOS%20DE%20UNIVERSIDAD%202026/Red-social-campus/.env) y [`.env.example`](file:///c:/Users/QUANT_CHELSEA/Documents/TRABAJOS%20DE%20UNIVERSIDAD%202026/Red-social-campus/.env.example)
+Esta guía te explica cómo tener las **cuentas, correos y contraseñas guardadas en Supabase** y validar las sesiones de cada usuario en tiempo real desde Supabase.
 
 ---
 
-## 🔑 Dónde pegar tus credenciales en el archivo `.env`
+## 📋 ¿Cómo funciona la arquitectura?
 
-Abre el archivo [`.env`](file:///c:/Users/QUANT_CHELSEA/Documents/TRABAJOS%20DE%20UNIVERSIDAD%202026/Red-social-campus/.env) y sustituye los valores en esta sección:
+1. **Cuentas y Contraseñas**: Se guardan y cifran de forma nativa en el módulo **Supabase Auth** (`auth.users`).
+2. **Validación de Sesiones**: Cada vez que el usuario ingresa o recarga la aplicación, **Supabase valida la sesión directamente** y refresca los tokens JWT automáticamente.
+3. **Perfiles**: La información académica (nombre, carrera, universidad, semestre) se sincroniza en la tabla `public.profiles`.
+
+---
+
+## ⚡ Paso 1: Ejecutar el Script de Tablas en Supabase
+
+1. Entra a tu proyecto en [Supabase Dashboard](https://supabase.com/dashboard).
+2. En el menú lateral izquierdo, haz clic en **SQL Editor**.
+3. Haz clic en **New query** (o botón verde `+`).
+4. Abre y copia el contenido completo del archivo [`supabase_setup.sql`](file:///c:/Users/Personal/Documents/Red-social-campus-1/supabase_setup.sql).
+5. Pégalo en el editor de Supabase y haz clic en **Run** (o presiona `Ctrl + Enter`).
+
+> Este script creará automáticamente las tablas (`profiles`, `posts`, `stories`, `market_items`, etc.), las políticas de seguridad (RLS) y el disparador automático (`handle_new_user`) que vincula cada registro de Supabase Auth con su perfil.
+
+---
+
+## 🔑 Paso 2: Copiar tus Credenciales de Supabase en `.env`
+
+1. En tu proyecto de Supabase, ve a **Project Settings** (el icono de engranaje ⚙️ abajo a la izquierda).
+2. Haz clic en **API** (dentro de Configuration).
+3. Copia los siguientes dos valores:
+   - **Project URL** (ejemplo: `https://abcdefghijklm.supabase.co`)
+   - **Project API keys -> `anon` `public`** (clave larga que empieza con `eyJh...`)
+4. Abre tu archivo [`.env`](file:///c:/Users/Personal/Documents/Red-social-campus-1/.env) en este proyecto y sustitúyelos:
 
 ```env
-# ==============================================================================
-# SUPABASE CONFIGURATION
-# ==============================================================================
-# 1. URL del Proyecto (Supabase -> Project Settings -> API -> Project URL)
-VITE_SUPABASE_URL="https://xxxxxxxxxxxxxxxxxxxx.supabase.co"
-SUPABASE_URL="https://xxxxxxxxxxxxxxxxxxxx.supabase.co"
+# 1. URL de tu proyecto
+VITE_SUPABASE_URL="https://tu-proyecto.supabase.co"
+SUPABASE_URL="https://tu-proyecto.supabase.co"
 
-# 2. Anon Public Key (Supabase -> Project Settings -> API -> Project API keys -> anon public)
-VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-
-# 3. Service Role Key (Opcional para backend: Supabase -> Project Settings -> API -> service_role)
-SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-
-# 4. Cadena de conexión PostgreSQL (Supabase -> Project Settings -> Database -> Connection String -> URI)
-DATABASE_URL="postgresql://postgres.xxxxxxxxxxxx:[TU-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
-ENABLE_POSTGRES="true"
+# 2. Clave anónima pública
+VITE_SUPABASE_ANON_KEY="tu-anon-key-larga-aqui"
+SUPABASE_ANON_KEY="tu-anon-key-larga-aqui"
 ```
 
 ---
 
-## ⚡ Pasos rápidos para inicializar en Supabase
+## ⚙️ Paso 3: Configurar Confirmación de Correo (Recomendado para desarrollo)
 
-1. **Crear las tablas**:
-   - Entra al dashboard de tu proyecto en Supabase.
-   - Ve a **SQL Editor** -> **New query**.
-   - Pega el contenido de [`server/models/schema.sql`](file:///c:/Users/QUANT_CHELSEA/Documents/TRABAJOS%20DE%20UNIVERSIDAD%202026/Red-social-campus/server/models/schema.sql) y haz clic en **Run**.
+Por defecto, Supabase requiere que el usuario haga clic en un enlace de correo para activar su cuenta. Para que el registro sea **inmediato**:
 
-2. **Pegar las claves**:
-   - Pega tu URL, Anon Key y Connection String en el archivo `.env`.
+1. En Supabase, ve a **Authentication** (icono de candado 🔐 en el menú lateral).
+2. Ve a **Providers** -> **Email**.
+3. Desactiva la opción **"Confirm email"**.
+4. Haz clic en **Save**.
 
-3. **Iniciar la aplicación**:
-   ```bash
-   npm run dev
-   ```
+*(De esta forma, cuando un estudiante cree una cuenta, podrá ingresar de inmediato sin esperar confirmación por correo).*
+
+---
+
+## 🚀 Paso 4: Iniciar la Aplicación
+
+En tu terminal:
+
+```bash
+npm run dev
+```
+
+¡Listo! A partir de ese momento:
+- Cualquier cuenta nueva se registrará en **Supabase Auth**.
+- Al iniciar sesión, Supabase verificará las contraseñas.
+- Si recargas la página o abres la app en otro navegador, Supabase validará la sesión activa automáticamente.

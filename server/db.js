@@ -7,7 +7,18 @@
  *   a un almacén temporal en memoria sin cuentas de demostración.
  */
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DATA_DIR = path.join(__dirname, 'data');
+const DB_FILE = path.join(DATA_DIR, 'local_db.json');
 
 function formatTimeAgo(value) {
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
@@ -18,7 +29,7 @@ function formatTimeAgo(value) {
 }
 
 /**
- * Almacén en memoria estructurado
+ * Almacén en memoria estructurado (respaldado automáticamente en disco)
  */
 const inMemoryStore = {
   users: [],
@@ -29,6 +40,42 @@ const inMemoryStore = {
   campus_posts: [],
   campus_post_likes: [],
 };
+
+function loadLocalDatabase() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      if (data && typeof data === 'object') {
+        inMemoryStore.users = Array.isArray(data.users) ? data.users : [];
+        inMemoryStore.profiles = Array.isArray(data.profiles) ? data.profiles : [];
+        inMemoryStore.auth_providers = Array.isArray(data.auth_providers) ? data.auth_providers : [];
+        inMemoryStore.user_sessions = Array.isArray(data.user_sessions) ? data.user_sessions : [];
+        inMemoryStore.user_follows = Array.isArray(data.user_follows) ? data.user_follows : [];
+        inMemoryStore.campus_posts = Array.isArray(data.campus_posts) ? data.campus_posts : [];
+        inMemoryStore.campus_post_likes = Array.isArray(data.campus_post_likes) ? data.campus_post_likes : [];
+        console.log(`[DB] Base de datos persistente en disco cargada (${inMemoryStore.users.length} usuarios registrados).`);
+      }
+    }
+  } catch (err) {
+    console.warn('[DB] No se pudo leer la base de datos local en disco:', err.message);
+  }
+}
+
+function persistLocalDatabase() {
+  if (usePostgres) return;
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(DB_FILE, JSON.stringify(inMemoryStore, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[DB] Error guardando base de datos en disco:', err.message);
+  }
+}
 
 // Conexión dinámica a PostgreSQL si pg estuviera instalado y configurado
 let pgPool = null;
@@ -61,12 +108,13 @@ async function initDatabase() {
       console.log(`[DB] Conectado exitosamente a PostgreSQL (${res.rows[0].now})`);
       usePostgres = true;
     } catch (err) {
-      console.warn(`[DB] PostgreSQL no disponible (${err.message}). Utilizando persistencia en memoria.`);
+      console.warn(`[DB] PostgreSQL no disponible (${err.message}). Utilizando persistencia en disco local.`);
       usePostgres = false;
-      // No lanzar excepción no controlada en Vercel para evitar FUNCTION_INVOCATION_FAILED
+      loadLocalDatabase();
     }
   } else {
-    console.log('[DB] Operando con Almacén Estructurado en Memoria (Optimizado para desarrollo rápido y pruebas).');
+    console.log('[DB] Operando con Almacén Local Persistente (guardado automático en server/data/local_db.json).');
+    loadLocalDatabase();
   }
 }
 
@@ -76,6 +124,7 @@ try {
 } catch (err) {
   console.error('[DB] Error de inicialización:', err.message);
   usePostgres = false;
+  loadLocalDatabase();
 }
 
 /**
@@ -141,6 +190,7 @@ export const db = {
     };
 
     inMemoryStore.users.push(newUser);
+    persistLocalDatabase();
     return { ...newUser };
   },
 
@@ -162,6 +212,7 @@ export const db = {
     if (!user) return null;
     user.password_hash = password_hash;
     user.updated_at = now;
+    persistLocalDatabase();
     return { ...user };
   },
 
@@ -182,6 +233,7 @@ export const db = {
     if (user) {
       user.is_verified = true;
       user.updated_at = now;
+      persistLocalDatabase();
       return { ...user };
     }
     return null;
@@ -229,6 +281,7 @@ export const db = {
 
     if (existingIndex >= 0) {
       inMemoryStore.auth_providers[existingIndex].metadata = metadata;
+      persistLocalDatabase();
       return { ...inMemoryStore.auth_providers[existingIndex] };
     }
 
@@ -242,6 +295,7 @@ export const db = {
       created_at: now,
     };
     inMemoryStore.auth_providers.push(record);
+    persistLocalDatabase();
     return { ...record };
   },
 
@@ -322,6 +376,7 @@ export const db = {
     }
 
     inMemoryStore.profiles.push(record);
+    persistLocalDatabase();
     return { ...record };
   },
 
@@ -385,6 +440,7 @@ export const db = {
     };
 
     inMemoryStore.profiles[profileIndex] = updated;
+    persistLocalDatabase();
     return { ...updated };
   },
 
@@ -449,7 +505,10 @@ export const db = {
     }
 
     const existing = inMemoryStore.user_follows.some((edge) => edge.follower_id === followerId && edge.followed_id === followedId);
-    if (!existing) inMemoryStore.user_follows.push({ follower_id: followerId, followed_id: followedId, created_at: new Date().toISOString() });
+    if (!existing) {
+      inMemoryStore.user_follows.push({ follower_id: followerId, followed_id: followedId, created_at: new Date().toISOString() });
+      persistLocalDatabase();
+    }
     return { following: true, created: !existing };
   },
 
@@ -466,6 +525,9 @@ export const db = {
     inMemoryStore.user_follows = inMemoryStore.user_follows.filter(
       (edge) => !(edge.follower_id === followerId && edge.followed_id === followedId)
     );
+    if (inMemoryStore.user_follows.length < before) {
+      persistLocalDatabase();
+    }
     return { following: false, deleted: inMemoryStore.user_follows.length < before };
   },
 
@@ -545,6 +607,7 @@ export const db = {
     const index = inMemoryStore.campus_post_likes.findIndex((like) => like.post_id === postId && like.user_id === userId);
     if (liked && index < 0) inMemoryStore.campus_post_likes.push({ post_id: postId, user_id: userId });
     if (!liked && index >= 0) inMemoryStore.campus_post_likes.splice(index, 1);
+    persistLocalDatabase();
     return inMemoryStore.campus_post_likes.filter((like) => like.post_id === postId).length;
   },
 
@@ -577,6 +640,7 @@ export const db = {
 
     const record = { id, user_id: userId, post_data: postData, created_at: now };
     inMemoryStore.campus_posts.push(record);
+    persistLocalDatabase();
     return {
       ...postData,
       id,
@@ -620,6 +684,7 @@ export const db = {
     }
 
     inMemoryStore.user_sessions.push(record);
+    persistLocalDatabase();
     return { ...record };
   },
 
@@ -661,6 +726,7 @@ export const db = {
     if (session) {
       session.revoked = true;
       session.revoked_at = now;
+      persistLocalDatabase();
     }
     return true;
   },
@@ -685,6 +751,7 @@ export const db = {
         s.revoked_at = now;
       }
     });
+    persistLocalDatabase();
     return true;
   },
 };

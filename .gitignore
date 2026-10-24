@@ -8,3 +8,4 @@ coverage/
 !.env.example
 *.mp4
 uploads/
+server/data/

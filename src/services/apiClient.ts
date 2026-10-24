@@ -246,6 +246,18 @@ class ApiClient {
       }
 
       if (!response.ok) {
+        // Si el backend responde 401 en /api/auth/login, comprobar si el usuario fue registrado en el almacenamiento local
+        if (endpoint === '/api/auth/login' && response.status === 401) {
+          try {
+            const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
+            const localUsers = LocalAuthStore.getUsers();
+            if (body?.email && localUsers.some((u) => u.email.toLowerCase() === String(body.email).toLowerCase().trim())) {
+              console.warn(`[ApiClient] Usuario registrado en almacenamiento local encontrado. Conmutando a fallback local.`);
+              return this.handleFallback<T>(endpoint, options);
+            }
+          } catch {}
+        }
+
         const error: any = new Error(data.message || `Error HTTP ${response.status}`);
         error.status = response.status;
         error.code = data.code || 'HTTP_ERROR';
@@ -253,6 +265,20 @@ class ApiClient {
         error.prompt_upgrade = data.prompt_upgrade || false;
         error.data = data;
         throw error;
+      }
+
+      // Sincronizar sesión activa en el navegador si el login o registro fue exitoso
+      if (
+        (endpoint === '/api/auth/login' || endpoint === '/api/auth/register') &&
+        data?.success &&
+        data?.user
+      ) {
+        LocalAuthStore.setSession({
+          token: data.token,
+          user: data.user,
+          profile: data.profile,
+          isGuest: false,
+        });
       }
 
       return data as T;

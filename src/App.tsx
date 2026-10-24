@@ -745,6 +745,7 @@ function CampusApp() {
       <NotificationsModal
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
+        onOpenSearch={() => setIsSearchOpen(true)}
       />
 
       {/* One-time University Onboarding Modal */}

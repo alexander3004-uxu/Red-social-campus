@@ -37,6 +37,67 @@ export async function unfollowPerson(req, res) {
   }
 }
 
+export async function sendFriendRequest(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
+      return res.status(404).json({ success: false, code: 'PERSON_NOT_FOUND', message: 'No encontramos esa cuenta.' });
+    }
+    const result = await db.sendFriendRequest(req.user.id, userId);
+    return res.json({ success: true, request: result });
+  } catch (error) {
+    const status = error.code === 'INVALID_REQUEST' ? 400 : 500;
+    return res.status(status).json({ success: false, message: error.message || 'No se pudo enviar la solicitud.' });
+  }
+}
+
+export async function acceptFriendRequest(req, res) {
+  try {
+    const { requestId } = req.params;
+    const result = await db.acceptFriendRequest(requestId, req.user.id);
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'No se encontró la solicitud de amistad.' });
+    }
+    return res.json({ success: true, request: result });
+  } catch (error) {
+    console.error('[Social] Error aceptando solicitud:', error);
+    return res.status(500).json({ success: false, message: 'No se pudo aceptar la solicitud.' });
+  }
+}
+
+export async function rejectFriendRequest(req, res) {
+  try {
+    const { requestId } = req.params;
+    const result = await db.rejectFriendRequest(requestId, req.user.id);
+    return res.json({ success: true, request: result });
+  } catch (error) {
+    console.error('[Social] Error rechazando solicitud:', error);
+    return res.status(500).json({ success: false, message: 'No se pudo rechazar la solicitud.' });
+  }
+}
+
+export async function cancelFriendRequest(req, res) {
+  try {
+    const { userId } = req.params;
+    const deleted = await db.cancelFriendRequest(req.user.id, userId);
+    return res.json({ success: true, cancelled: deleted });
+  } catch (error) {
+    console.error('[Social] Error cancelando solicitud:', error);
+    return res.status(500).json({ success: false, message: 'No se pudo cancelar la solicitud.' });
+  }
+}
+
+export async function removeFriend(req, res) {
+  try {
+    const { userId } = req.params;
+    await db.removeFriend(req.user.id, userId);
+    return res.json({ success: true, removed: true });
+  } catch (error) {
+    console.error('[Social] Error eliminando amistad:', error);
+    return res.status(500).json({ success: false, message: 'No se pudo eliminar la amistad.' });
+  }
+}
+
 export async function listPosts(req, res) {
   try {
     const posts = await db.listCampusPosts(req.user.id);

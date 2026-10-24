@@ -136,6 +136,25 @@ class LocalAuthStore {
       console.warn(e);
     }
   }
+
+  private static FRIEND_REQUESTS_KEY = 'campuslink_db_friend_requests';
+
+  public static getFriendRequests(): Array<{ id: string; sender_id: string; receiver_id: string; status: string; created_at: string }> {
+    try {
+      const data = localStorage.getItem(this.FRIEND_REQUESTS_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public static saveFriendRequests(requests: Array<{ id: string; sender_id: string; receiver_id: string; status: string; created_at: string }>) {
+    try {
+      localStorage.setItem(this.FRIEND_REQUESTS_KEY, JSON.stringify(requests));
+    } catch (e) {
+      console.warn(e);
+    }
+  }
 }
 
 class ApiClient {
@@ -287,12 +306,27 @@ class ApiClient {
       const termMatch = endpoint.match(/[?&]q=([^&]*)/);
       const term = termMatch ? decodeURIComponent(termMatch[1]).trim().toLowerCase() : '';
       const follows = LocalAuthStore.getFollows();
+      const requests = LocalAuthStore.getFriendRequests();
       const users = LocalAuthStore.getUsers();
 
       const people = users
         .filter((u) => u.id !== currentUserId)
         .map((u) => {
           const prof = u.profile || {};
+          const fr = requests.find(
+            (r) =>
+              ((r.sender_id === currentUserId && r.receiver_id === u.id) ||
+               (r.receiver_id === currentUserId && r.sender_id === u.id)) &&
+              ['pending', 'accepted'].includes(r.status)
+          );
+
+          let friendship_status = 'none';
+          if (fr) {
+            if (fr.status === 'accepted') friendship_status = 'friends';
+            else if (fr.sender_id === currentUserId) friendship_status = 'pending_sent';
+            else friendship_status = 'pending_received';
+          }
+
           return {
             id: u.id,
             username: prof.username || u.email?.split('@')[0] || 'usuario',
@@ -300,7 +334,10 @@ class ApiClient {
             avatar_url: prof.avatar_url || '',
             university: prof.university || '',
             career: prof.career || '',
+            faculty: prof.faculty || '',
             is_following: follows.some((f) => f.follower_id === currentUserId && f.followed_id === u.id),
+            friendship_status,
+            request_id: fr?.id,
           };
         })
         .filter((p) => {
@@ -308,9 +345,89 @@ class ApiClient {
           return [p.username, p.full_name, p.university, p.career]
             .some((val) => String(val || '').toLowerCase().includes(term));
         })
-        .slice(0, 30);
+        .slice(0, 40);
 
       return Promise.resolve({ success: true, people } as T);
+    }
+
+    // Amistades Fallback
+    if (endpoint.includes('/api/social/friends/request/') && options.method === 'POST') {
+      const currentSession = LocalAuthStore.getSession();
+      const currentUserId = currentSession?.user?.id;
+      if (!currentUserId) {
+        const err: any = new Error('Inicia sesión para interactuar con otros usuarios.');
+        err.status = 401;
+        return Promise.reject(err);
+      }
+      const targetUserId = decodeURIComponent(endpoint.split('/').pop() || '');
+      const requests = LocalAuthStore.getFriendRequests();
+      let req = requests.find((r) => r.sender_id === currentUserId && r.receiver_id === targetUserId);
+      if (req) {
+        req.status = 'pending';
+      } else {
+        req = {
+          id: `req_${Date.now()}`,
+          sender_id: currentUserId,
+          receiver_id: targetUserId,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+        };
+        requests.push(req);
+      }
+      LocalAuthStore.saveFriendRequests(requests);
+      return Promise.resolve({ success: true, request: req } as T);
+    }
+
+    if (endpoint.includes('/api/social/friends/accept/') && options.method === 'POST') {
+      const currentSession = LocalAuthStore.getSession();
+      const currentUserId = currentSession?.user?.id;
+      const targetId = decodeURIComponent(endpoint.split('/').pop() || '');
+      const requests = LocalAuthStore.getFriendRequests();
+      const req = requests.find((r) => r.id === targetId || (r.sender_id === targetId && r.receiver_id === currentUserId));
+      if (req) {
+        req.status = 'accepted';
+        LocalAuthStore.saveFriendRequests(requests);
+        let follows = LocalAuthStore.getFollows();
+        if (!follows.some((f) => f.follower_id === req.sender_id && f.followed_id === req.receiver_id)) {
+          follows.push({ follower_id: req.sender_id, followed_id: req.receiver_id });
+        }
+        if (!follows.some((f) => f.follower_id === req.receiver_id && f.followed_id === req.sender_id)) {
+          follows.push({ follower_id: req.receiver_id, followed_id: req.sender_id });
+        }
+        LocalAuthStore.saveFollows(follows);
+      }
+      return Promise.resolve({ success: true, request: req } as T);
+    }
+
+    if (endpoint.includes('/api/social/friends/reject/') && options.method === 'POST') {
+      const targetId = decodeURIComponent(endpoint.split('/').pop() || '');
+      const requests = LocalAuthStore.getFriendRequests();
+      const req = requests.find((r) => r.id === targetId);
+      if (req) {
+        req.status = 'rejected';
+        LocalAuthStore.saveFriendRequests(requests);
+      }
+      return Promise.resolve({ success: true, request: req } as T);
+    }
+
+    if (endpoint.includes('/api/social/friends/request/') && options.method === 'DELETE') {
+      const currentSession = LocalAuthStore.getSession();
+      const currentUserId = currentSession?.user?.id;
+      const targetUserId = decodeURIComponent(endpoint.split('/').pop() || '');
+      let requests = LocalAuthStore.getFriendRequests();
+      requests = requests.filter((r) => !(r.sender_id === currentUserId && r.receiver_id === targetUserId && r.status === 'pending'));
+      LocalAuthStore.saveFriendRequests(requests);
+      return Promise.resolve({ success: true, cancelled: true } as T);
+    }
+
+    if (endpoint.includes('/api/social/friends/') && options.method === 'DELETE') {
+      const currentSession = LocalAuthStore.getSession();
+      const currentUserId = currentSession?.user?.id;
+      const targetUserId = decodeURIComponent(endpoint.split('/').pop() || '');
+      let requests = LocalAuthStore.getFriendRequests();
+      requests = requests.filter((r) => !((r.sender_id === currentUserId && r.receiver_id === targetUserId) || (r.sender_id === targetUserId && r.receiver_id === currentUserId)));
+      LocalAuthStore.saveFriendRequests(requests);
+      return Promise.resolve({ success: true, removed: true } as T);
     }
 
     if (endpoint.includes('/api/social/people/') && endpoint.endsWith('/follow')) {
@@ -674,6 +791,21 @@ class ApiClient {
 
     unfollowPerson: (userId: string) =>
       this.request(`/api/social/people/${encodeURIComponent(userId)}/follow`, { method: 'DELETE' }),
+
+    sendFriendRequest: (userId: string) =>
+      this.request(`/api/social/friends/request/${encodeURIComponent(userId)}`, { method: 'POST' }),
+
+    acceptFriendRequest: (requestId: string) =>
+      this.request(`/api/social/friends/accept/${encodeURIComponent(requestId)}`, { method: 'POST' }),
+
+    rejectFriendRequest: (requestId: string) =>
+      this.request(`/api/social/friends/reject/${encodeURIComponent(requestId)}`, { method: 'POST' }),
+
+    cancelFriendRequest: (userId: string) =>
+      this.request(`/api/social/friends/request/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+
+    removeFriend: (userId: string) =>
+      this.request(`/api/social/friends/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
   };
 }
 

@@ -132,3 +132,60 @@ export interface ChatThread {
     time: string;
   }[];
 }
+
+export type FriendshipStatus = 'none' | 'pending_sent' | 'pending_received' | 'friends';
+
+export interface FriendRequest {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+  created_at: string;
+  updated_at?: string;
+  sender_profile?: {
+    user_id: string;
+    username: string;
+    full_name: string;
+    avatar_url?: string;
+    career?: string;
+    university?: string;
+  };
+  receiver_profile?: {
+    user_id: string;
+    username: string;
+    full_name: string;
+    avatar_url?: string;
+    career?: string;
+    university?: string;
+  };
+}
+
+export interface UserSearchResult {
+  id: string;
+  user_id?: string;
+  username: string;
+  full_name: string;
+  avatar_url?: string;
+  university?: string;
+  career?: string;
+  faculty?: string;
+  friendship_status: FriendshipStatus;
+  request_id?: string;
+}
+
+export interface CampusNotification {
+  id: string;
+  user_id: string;
+  actor_id?: string;
+  type: string;
+  title: string;
+  body: string;
+  entity_type?: string;
+  entity_id?: string;
+  data?: Record<string, any>;
+  is_read: boolean;
+  created_at: string;
+  actor_name?: string;
+  actor_avatar?: string;
+  actor_username?: string;
+}

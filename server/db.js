@@ -26,6 +26,7 @@ const inMemoryStore = {
   auth_providers: [],
   user_sessions: [],
   user_follows: [],
+  friend_requests: [],
   campus_posts: [],
   campus_post_likes: [],
 };
@@ -393,14 +394,25 @@ export const db = {
 
     if (usePostgres && pgPool) {
       const res = await pgPool.query(
-        `SELECT p.user_id AS id, p.username, p.full_name, p.avatar_url, p.university, p.career,
-                EXISTS (SELECT 1 FROM user_follows f WHERE f.follower_id = $1 AND f.followed_id = p.user_id) AS is_following
+        `SELECT p.user_id AS id, p.username, p.full_name, p.avatar_url, p.university, p.career, p.faculty,
+                EXISTS (SELECT 1 FROM user_follows f WHERE f.follower_id = $1 AND f.followed_id = p.user_id) AS is_following,
+                fr.id AS request_id,
+                CASE
+                  WHEN fr.status = 'accepted' THEN 'friends'
+                  WHEN fr.status = 'pending' AND fr.sender_id = $1 THEN 'pending_sent'
+                  WHEN fr.status = 'pending' AND fr.receiver_id = $1 THEN 'pending_received'
+                  ELSE 'none'
+                END AS friendship_status
          FROM profiles p
          JOIN users u ON u.id = p.user_id
+         LEFT JOIN friend_requests fr ON (
+           (fr.sender_id = $1 AND fr.receiver_id = p.user_id) OR
+           (fr.receiver_id = $1 AND fr.sender_id = p.user_id)
+         ) AND fr.status IN ('pending', 'accepted')
          WHERE p.user_id <> $1 AND u.is_active = TRUE AND u.role <> 'guest'
            AND ($2 = '' OR p.username ILIKE '%' || $2 || '%' OR p.full_name ILIKE '%' || $2 || '%'
                 OR p.university ILIKE '%' || $2 || '%' OR p.career ILIKE '%' || $2 || '%')
-         ORDER BY p.full_name ASC LIMIT 30`,
+         ORDER BY p.full_name ASC LIMIT 40`,
         [currentUserId, term]
       );
       return res.rows;
@@ -413,16 +425,185 @@ export const db = {
         return [profile.username, profile.full_name, profile.university, profile.career]
           .some((value) => String(value || '').toLowerCase().includes(term));
       })
-      .slice(0, 30)
-      .map((profile) => ({
-        id: profile.user_id,
-        username: profile.username,
-        full_name: profile.full_name,
-        avatar_url: profile.avatar_url,
-        university: profile.university,
-        career: profile.career,
-        is_following: inMemoryStore.user_follows.some((edge) => edge.follower_id === currentUserId && edge.followed_id === profile.user_id),
-      }));
+      .slice(0, 40)
+      .map((profile) => {
+        const fr = (inMemoryStore.friend_requests || []).find(
+          (r) =>
+            ((r.sender_id === currentUserId && r.receiver_id === profile.user_id) ||
+             (r.receiver_id === currentUserId && r.sender_id === profile.user_id)) &&
+            ['pending', 'accepted'].includes(r.status)
+        );
+
+        let friendship_status = 'none';
+        if (fr) {
+          if (fr.status === 'accepted') friendship_status = 'friends';
+          else if (fr.sender_id === currentUserId) friendship_status = 'pending_sent';
+          else friendship_status = 'pending_received';
+        }
+
+        return {
+          id: profile.user_id,
+          username: profile.username,
+          full_name: profile.full_name,
+          avatar_url: profile.avatar_url,
+          university: profile.university,
+          career: profile.career,
+          faculty: profile.faculty,
+          is_following: inMemoryStore.user_follows.some((edge) => edge.follower_id === currentUserId && edge.followed_id === profile.user_id),
+          friendship_status,
+          request_id: fr?.id,
+        };
+      });
+  },
+
+  async sendFriendRequest(senderId, receiverId) {
+    if (!senderId || !receiverId || senderId === receiverId) {
+      const error = new Error('No puedes enviarte una solicitud a ti mismo.');
+      error.code = 'INVALID_REQUEST';
+      throw error;
+    }
+
+    const now = new Date().toISOString();
+
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `INSERT INTO friend_requests (sender_id, receiver_id, status, updated_at)
+         VALUES ($1, $2, 'pending', $3)
+         ON CONFLICT (sender_id, receiver_id)
+         DO UPDATE SET status = 'pending', updated_at = $3
+         RETURNING *`,
+        [senderId, receiverId, now]
+      );
+      return res.rows[0];
+    }
+
+    const existing = inMemoryStore.friend_requests.find(
+      (r) => r.sender_id === senderId && r.receiver_id === receiverId
+    );
+
+    if (existing) {
+      existing.status = 'pending';
+      existing.updated_at = now;
+      return { ...existing };
+    }
+
+    const record = {
+      id: crypto.randomUUID(),
+      sender_id: senderId,
+      receiver_id: receiverId,
+      status: 'pending',
+      created_at: now,
+      updated_at: now,
+    };
+    inMemoryStore.friend_requests.push(record);
+    return { ...record };
+  },
+
+  async acceptFriendRequest(requestIdOrSenderId, receiverId) {
+    const now = new Date().toISOString();
+
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `UPDATE friend_requests
+         SET status = 'accepted', updated_at = $1
+         WHERE (id::text = $2 OR (sender_id::text = $2 AND receiver_id = $3))
+         RETURNING *`,
+        [now, requestIdOrSenderId, receiverId]
+      );
+      const row = res.rows[0];
+      if (row) {
+        // Establecer follow mutuo
+        await pgPool.query(
+          `INSERT INTO user_follows (follower_id, followed_id) VALUES ($1, $2), ($2, $1)
+           ON CONFLICT DO NOTHING`,
+          [row.sender_id, row.receiver_id]
+        );
+      }
+      return row || null;
+    }
+
+    const req = inMemoryStore.friend_requests.find(
+      (r) =>
+        (r.id === requestIdOrSenderId || (r.sender_id === requestIdOrSenderId && r.receiver_id === receiverId)) &&
+        r.status === 'pending'
+    );
+    if (!req) return null;
+    req.status = 'accepted';
+    req.updated_at = now;
+
+    // Follow mutuo
+    if (!inMemoryStore.user_follows.some((e) => e.follower_id === req.sender_id && e.followed_id === req.receiver_id)) {
+      inMemoryStore.user_follows.push({ follower_id: req.sender_id, followed_id: req.receiver_id, created_at: now });
+    }
+    if (!inMemoryStore.user_follows.some((e) => e.follower_id === req.receiver_id && e.followed_id === req.sender_id)) {
+      inMemoryStore.user_follows.push({ follower_id: req.receiver_id, followed_id: req.sender_id, created_at: now });
+    }
+    return { ...req };
+  },
+
+  async rejectFriendRequest(requestIdOrSenderId, receiverId) {
+    const now = new Date().toISOString();
+
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `UPDATE friend_requests
+         SET status = 'rejected', updated_at = $1
+         WHERE (id::text = $2 OR (sender_id::text = $2 AND receiver_id = $3))
+         RETURNING *`,
+        [now, requestIdOrSenderId, receiverId]
+      );
+      return res.rows[0] || null;
+    }
+
+    const req = inMemoryStore.friend_requests.find(
+      (r) => r.id === requestIdOrSenderId || (r.sender_id === requestIdOrSenderId && r.receiver_id === receiverId)
+    );
+    if (!req) return null;
+    req.status = 'rejected';
+    req.updated_at = now;
+    return { ...req };
+  },
+
+  async cancelFriendRequest(senderId, receiverId) {
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `DELETE FROM friend_requests
+         WHERE sender_id = $1 AND receiver_id = $2 AND status = 'pending'
+         RETURNING id`,
+        [senderId, receiverId]
+      );
+      return res.rowCount > 0;
+    }
+
+    const before = inMemoryStore.friend_requests.length;
+    inMemoryStore.friend_requests = inMemoryStore.friend_requests.filter(
+      (r) => !(r.sender_id === senderId && r.receiver_id === receiverId && r.status === 'pending')
+    );
+    return inMemoryStore.friend_requests.length < before;
+  },
+
+  async removeFriend(userId1, userId2) {
+    if (usePostgres && pgPool) {
+      await pgPool.query(
+        `DELETE FROM friend_requests
+         WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1)`,
+        [userId1, userId2]
+      );
+      await pgPool.query(
+        `DELETE FROM user_follows
+         WHERE (follower_id = $1 AND followed_id = $2) OR (follower_id = $2 AND followed_id = $1)`,
+        [userId1, userId2]
+      );
+      return true;
+    }
+
+    inMemoryStore.friend_requests = inMemoryStore.friend_requests.filter(
+      (r) => !((r.sender_id === userId1 && r.receiver_id === userId2) || (r.sender_id === userId2 && r.receiver_id === userId1))
+    );
+    inMemoryStore.user_follows = inMemoryStore.user_follows.filter(
+      (e) => !((e.follower_id === userId1 && e.followed_id === userId2) || (e.follower_id === userId2 && e.followed_id === userId1))
+    );
+    return true;
   },
 
   async followPerson(followerId, followedId) {

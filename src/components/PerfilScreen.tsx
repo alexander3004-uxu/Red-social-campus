@@ -8,9 +8,10 @@
  * - Cambio seguro de contraseña con validación de contraseña actual y nueva
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-
+import { supabaseDataService } from '../services/supabaseDataService';
+import { UserSearchResult } from '../types';
 import { useTheme } from '../context/ThemeContext';
 
 interface PerfilScreenProps {
@@ -42,7 +43,27 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
 
   const { theme, isDark, toggleTheme, setTheme } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<'apuntes' | 'market' | 'grupos' | 'resenas'>('apuntes');
+  const [activeTab, setActiveTab] = useState<'apuntes' | 'market' | 'amigos'>('apuntes');
+  const [friendsList, setFriendsList] = useState<UserSearchResult[]>([]);
+
+  useEffect(() => {
+    if (!user?.id || isGuest) return;
+    let isMounted = true;
+    supabaseDataService.getFriends(user.id).then((list) => {
+      if (isMounted) setFriendsList(list);
+    }).catch((e) => console.warn(e));
+
+    const unsub = supabaseDataService.subscribeToFriendRequests(user.id, () => {
+      supabaseDataService.getFriends(user.id).then((list) => {
+        if (isMounted) setFriendsList(list);
+      }).catch((e) => console.warn(e));
+    });
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, [user?.id, isGuest]);
 
   // Estados del modal de edición de perfil
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -486,14 +507,18 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                 <span className="text-[10px] text-[#464555] mt-0.5">Ventas</span>
               </div>
 
-              <div className="flex flex-col items-center text-center p-1">
-                <span className="text-lg font-extrabold text-[#131b2e]">0</span>
-                <span className="text-[10px] text-[#464555] mt-0.5">Compañeros</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('amigos')}
+                className="flex flex-col items-center text-center p-1 rounded-xl transition hover:bg-white/60 active:scale-95"
+              >
+                <span className="text-lg font-extrabold text-[#3525cd]">{friendsList.length}</span>
+                <span className="text-[10px] font-semibold text-[#464555] mt-0.5">Amigos</span>
+              </button>
             </div>
           </section>
 
-          {/* Tabs de Apuntes y Actividad */}
+          {/* Tabs de Apuntes, Market y Amigos */}
           <section className="mt-4 px-4">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
               <button
@@ -505,7 +530,7 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                     : 'bg-[#eaedff] text-[#464555] hover:bg-[#dae2fd]'
                 }`}
               >
-                Apuntes & Recursos ({apuntesList.length})
+                Apuntes ({apuntesList.length})
               </button>
               <button
                 onClick={() => setActiveTab('market')}
@@ -517,6 +542,17 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                 }`}
               >
                 Artículos en Market (0)
+              </button>
+              <button
+                onClick={() => setActiveTab('amigos')}
+                type="button"
+                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                  activeTab === 'amigos'
+                    ? 'bg-[#3525cd] text-white shadow-xs'
+                    : 'bg-[#eaedff] text-[#464555] hover:bg-[#dae2fd]'
+                }`}
+              >
+                Mis Amigos ({friendsList.length})
               </button>
             </div>
 
@@ -553,6 +589,62 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                     </button>
                   </div>
                 ))}
+
+              {activeTab === 'market' && (
+                <div className="py-10 flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-4xl text-[#c5c2d6]">shopping_bag</span>
+                  <p className="mt-2 text-sm font-semibold text-[#48465a]">Sin artículos publicados</p>
+                  <p className="mt-1 text-xs text-[#858294]">Tus publicaciones en Campus Market se listarán aquí.</p>
+                </div>
+              )}
+
+              {activeTab === 'amigos' && friendsList.length === 0 && (
+                <div className="py-10 flex flex-col items-center text-center bg-white rounded-2xl border border-[#eaedff] p-6">
+                  <div className="w-12 h-12 rounded-2xl bg-[#eaedff] text-[#3525cd] flex items-center justify-center mb-2">
+                    <span className="material-symbols-outlined text-2xl">person_add</span>
+                  </div>
+                  <p className="text-sm font-bold text-[#131b2e]">Aún no has agregado amigos</p>
+                  <p className="mt-1 text-xs text-[#6e6b7e] max-w-xs">
+                    Usa el buscador para conectar con compañeros de tu facultad y ver sus publicaciones en el feed.
+                  </p>
+                </div>
+              )}
+
+              {activeTab === 'amigos' && friendsList.length > 0 && (
+                <div className="space-y-2">
+                  {friendsList.map((friend) => (
+                    <div
+                      key={friend.id}
+                      className="p-3.5 bg-white rounded-2xl border border-[#eaedff] shadow-xs flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {friend.avatar_url ? (
+                          <img
+                            src={friend.avatar_url}
+                            alt={friend.full_name}
+                            className="w-11 h-11 rounded-2xl object-cover ring-1 ring-[#3525cd]/20"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#3525cd] to-[#712ae2] text-white font-bold flex items-center justify-center text-sm">
+                            {friend.full_name.slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-bold text-[#131b2e] truncate">{friend.full_name}</h4>
+                          <span className="text-[11px] text-[#3525cd] font-semibold">@{friend.username}</span>
+                          {friend.career && (
+                            <p className="text-[10px] text-[#6e6b7f] truncate">{friend.career}</p>
+                          )}
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full bg-[#6ffbbe]/25 text-[#005338] text-[10px] font-bold flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[12px]">check</span>
+                        Amigos
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         </>

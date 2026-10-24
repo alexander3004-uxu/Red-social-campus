@@ -92,6 +92,24 @@ CREATE TABLE IF NOT EXISTS user_follows (
 CREATE INDEX IF NOT EXISTS idx_user_follows_followed ON user_follows(followed_id, follower_id);
 
 -- ==============================================================================
+-- 3.1 TABLA DE SOLICITUDES DE AMISTAD (FRIEND_REQUESTS)
+-- Gestión de invitaciones, estados (pending, accepted, rejected, cancelled)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS friend_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'cancelled')),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_friend_request UNIQUE (sender_id, receiver_id),
+    CONSTRAINT friend_request_no_self CHECK (sender_id <> receiver_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_friend_requests_receiver ON friend_requests(receiver_id, status);
+CREATE INDEX IF NOT EXISTS idx_friend_requests_sender ON friend_requests(sender_id, status);
+
+-- ==============================================================================
 -- 4. TABLA DE SESIONES Y REFRESH TOKENS (USER_SESSIONS)
 -- Manejo de tokens de larga duración, invitados y revocación de acceso
 -- ==============================================================================

@@ -196,16 +196,8 @@ export async function login(req, res) {
       });
     }
 
-    // Cargar perfil completo (o crear uno por defecto si no existía)
-    let profile = await db.findProfileByUserId(user.id);
-    if (!profile) {
-      profile = await db.createProfile({
-        user_id: user.id,
-        username: user.email.split('@')[0],
-        full_name: 'Estudiante Campus',
-        profile_completed: true,
-      });
-    }
+    // Cargar perfil completo
+    const profile = await db.findProfileByUserId(user.id);
 
     // Emitir tokens y cookies
     const { accessToken } = issueAuthSession(res, user, profile, false);
@@ -361,23 +353,7 @@ export async function getSessionUser(req, res) {
     }
 
     const user = await db.findUserById(req.user.id);
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        code: 'USER_NOT_FOUND',
-        message: 'La sesión expiró o el usuario no existe.',
-      });
-    }
-
-    let profile = await db.findProfileByUserId(req.user.id);
-    if (!profile) {
-      profile = await db.createProfile({
-        user_id: user.id,
-        username: user.email.split('@')[0],
-        full_name: 'Estudiante Campus',
-        profile_completed: true,
-      });
-    }
+    const profile = await db.findProfileByUserId(req.user.id);
 
     return res.status(200).json({
       success: true,

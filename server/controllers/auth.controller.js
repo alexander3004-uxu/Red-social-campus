@@ -127,7 +127,7 @@ export async function register(req, res) {
       faculty: faculty || '',
       career: career || '',
       semester: semester || '',
-      profile_completed: true,
+      profile_completed: false,
     });
 
     // Si provenía de una sesión de invitado, registrar la transición

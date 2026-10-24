@@ -515,7 +515,7 @@ class ApiClient {
         student_id: `UC-2026-${Math.floor(10000 + Math.random() * 90000)}`,
         reputation: 5.0,
         social_links: [],
-        profile_completed: true,
+        profile_completed: false,
       };
 
       const newUser = {

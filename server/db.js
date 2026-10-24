@@ -303,7 +303,7 @@ export const db = {
       student_id: profileData.student_id || `UC-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
       reputation: 5.0,
       social_links: profileData.social_links || [],
-      profile_completed: profileData.profile_completed ?? true,
+      profile_completed: profileData.profile_completed ?? false,
       created_at: now,
       updated_at: now,
     };

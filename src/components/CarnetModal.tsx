@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CURRENT_USER } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
 
 interface CarnetModalProps {
   isOpen: boolean;
@@ -8,9 +8,13 @@ interface CarnetModalProps {
 }
 
 export const CarnetModal: React.FC<CarnetModalProps> = ({ isOpen, onClose, university }) => {
+  const { profile, user } = useAuth();
   const [isNfcBeaming, setIsNfcBeaming] = useState(false);
   const [accessApproved, setAccessApproved] = useState(false);
-  const carnetUniversity = university || CURRENT_USER.university;
+  const carnetUniversity = university || profile?.university || 'Campus Universitario';
+  const studentName = profile?.full_name || 'Estudiante Universitario';
+  const studentCareer = profile?.career || 'Estudiante';
+  const studentCode = profile?.student_id || `UC-2026-${(user?.id || '84920').slice(0, 5).toUpperCase()}`;
 
   if (!isOpen) return null;
 
@@ -74,21 +78,27 @@ export const CarnetModal: React.FC<CarnetModalProps> = ({ isOpen, onClose, unive
             {/* Student Info & Photo */}
             <div className="flex items-center gap-3.5 mb-3">
               <div className="w-18 h-18 rounded-xl overflow-hidden ring-2 ring-[#4f46e5] shrink-0 bg-white">
-                <img
-                  alt={CURRENT_USER.name}
-                  className="w-full h-full object-cover"
-                  src={CURRENT_USER.avatar}
-                />
+                {profile?.avatar_url ? (
+                  <img
+                    alt={studentName}
+                    className="w-full h-full object-cover"
+                    src={profile.avatar_url}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-tr from-[#3525cd] to-[#712ae2] flex items-center justify-center text-white text-2xl font-bold">
+                    {studentName.slice(0, 1).toUpperCase()}
+                  </div>
+                )}
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-extrabold truncate text-white">
-                  {CURRENT_USER.name}
+                  {studentName}
                 </span>
                 <span className="text-[11px] text-[#dad7ff] font-semibold">
-                  {CURRENT_USER.career}
+                  {studentCareer}
                 </span>
                 <span className="text-[10px] text-white/70">
-                  Carnet: <strong className="text-white font-mono">{CURRENT_USER.studentId}</strong>
+                  Carnet: <strong className="text-white font-mono">{studentCode}</strong>
                 </span>
                 <span className="text-[10px] text-white/70">
                   Válido: <strong className="text-[#6ffbbe]">Dic 2026</strong>
@@ -114,7 +124,7 @@ export const CarnetModal: React.FC<CarnetModalProps> = ({ isOpen, onClose, unive
                 <img
                   alt="QR Code"
                   className="w-full h-full object-contain"
-                  src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=CAMPUSLINK-SOFIA-20228491-VERIFIED"
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=CAMPUSLINK-${encodeURIComponent(studentCode)}-VERIFIED`}
                 />
               </div>
             </div>

@@ -123,10 +123,11 @@ export async function register(req, res) {
       user_id: newUser.id,
       username,
       full_name,
-      university,
-      faculty,
-      career,
-      semester,
+      university: university || '',
+      faculty: faculty || '',
+      career: career || '',
+      semester: semester || '',
+      profile_completed: true,
     });
 
     // Si provenía de una sesión de invitado, registrar la transición

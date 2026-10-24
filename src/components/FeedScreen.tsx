@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Post, Story } from '../types';
-import { CURRENT_USER } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
 
 interface FeedScreenProps {
   posts: Post[];
@@ -27,6 +27,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
   onOpenCreatePost,
   onOpenSearch,
 }) => {
+  const { profile } = useAuth();
   const [activeCategory, setActiveCategory] = useState<'para-ti' | 'carrera' | 'eventos' | 'oficial'>('para-ti');
   const [commentOpenPostId, setCommentOpenPostId] = useState<string | null>(null);
   const [newCommentText, setNewCommentText] = useState('');
@@ -140,11 +141,17 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
         <div className="bg-white rounded-2xl p-4 shadow-[0_4px_16px_-2px_rgba(15,23,42,0.04)] border border-[#eaedff] flex flex-col gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-[#eaedff]">
-              <img
-                alt={CURRENT_USER.name}
-                className="w-full h-full object-cover"
-                src={CURRENT_USER.avatar}
-              />
+              {profile?.avatar_url ? (
+                <img
+                  alt={profile?.full_name || 'Tú'}
+                  className="w-full h-full object-cover"
+                  src={profile.avatar_url}
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-tr from-[#3525cd] to-[#712ae2] flex items-center justify-center text-white text-sm font-bold">
+                  {(profile?.full_name || 'U')[0].toUpperCase()}
+                </div>
+              )}
             </div>
             <button
               onClick={() => onOpenCreatePost('text')}

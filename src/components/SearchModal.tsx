@@ -102,8 +102,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onNav
           {!isLoading && !errorMessage && people.length === 0 && (
             <div className="px-4 py-9 text-center">
               <span className="material-symbols-outlined text-3xl text-[#aaa5ba]">person_search</span>
-              <p className="mt-2 text-sm font-semibold text-[#48465a]">Aún no hay personas para mostrar</p>
-              <p className="mt-1 text-xs text-[#858294]">Cuando otros usuarios completen su perfil, aparecerán aquí.</p>
+              <p className="mt-2 text-sm font-semibold text-[#48465a]">No se encontraron personas</p>
+              <p className="mt-1 text-xs text-[#858294]">Busca por nombre, usuario (@username), universidad o carrera.</p>
             </div>
           )}
           {people.map((person) => (

@@ -7,13 +7,6 @@
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Post, Story, MarketItem, CommunityGroup, ChatThread } from '../types';
-import {
-  INITIAL_POSTS,
-  STORIES,
-  INITIAL_MARKET_ITEMS,
-  COMMUNITY_GROUPS,
-  INITIAL_CHATS,
-} from '../data/mockData';
 
 // Mapeadores de datos (DB snake_case <-> App camelCase)
 
@@ -177,7 +170,7 @@ export const supabaseDataService = {
 
   async fetchPosts(userId?: string): Promise<Post[]> {
     if (!isSupabaseConfigured()) {
-      return INITIAL_POSTS;
+      return [];
     }
 
     try {
@@ -188,7 +181,7 @@ export const supabaseDataService = {
 
       if (error || !postsData) {
         console.warn('[Supabase] Error cargando posts:', error?.message);
-        return INITIAL_POSTS;
+        return [];
       }
 
       // Cargar likes y saves del usuario actual si existe
@@ -208,7 +201,7 @@ export const supabaseDataService = {
       return postsData.map((row) => mapPostFromDb(row, userId, userLikes, userSaves));
     } catch (err) {
       console.warn('[Supabase] Fallback a datos locales de posts:', err);
-      return INITIAL_POSTS;
+      return [];
     }
   },
 
@@ -314,7 +307,7 @@ export const supabaseDataService = {
   // ============================================================================
 
   async fetchStories(): Promise<Story[]> {
-    if (!isSupabaseConfigured()) return STORIES;
+    if (!isSupabaseConfigured()) return [];
 
     try {
       const { data, error } = await supabase
@@ -323,11 +316,11 @@ export const supabaseDataService = {
         .order('created_at', { ascending: false });
 
       if (error || !data || data.length === 0) {
-        return STORIES;
+        return [];
       }
       return data.map(mapStoryFromDb);
     } catch {
-      return STORIES;
+      return [];
     }
   },
 
@@ -367,7 +360,7 @@ export const supabaseDataService = {
   // ============================================================================
 
   async fetchMarketItems(userId?: string): Promise<MarketItem[]> {
-    if (!isSupabaseConfigured()) return INITIAL_MARKET_ITEMS;
+    if (!isSupabaseConfigured()) return [];
 
     try {
       const { data, error } = await supabase
@@ -376,7 +369,7 @@ export const supabaseDataService = {
         .order('created_at', { ascending: false });
 
       if (error || !data || data.length === 0) {
-        return INITIAL_MARKET_ITEMS;
+        return [];
       }
 
       let userFavs = new Set<string>();
@@ -390,7 +383,7 @@ export const supabaseDataService = {
 
       return data.map((row) => mapMarketItemFromDb(row, userFavs));
     } catch {
-      return INITIAL_MARKET_ITEMS;
+      return [];
     }
   },
 
@@ -451,7 +444,7 @@ export const supabaseDataService = {
   // ============================================================================
 
   async fetchGroups(userId?: string): Promise<CommunityGroup[]> {
-    if (!isSupabaseConfigured()) return COMMUNITY_GROUPS;
+    if (!isSupabaseConfigured()) return [];
 
     try {
       const { data, error } = await supabase
@@ -460,7 +453,7 @@ export const supabaseDataService = {
         .order('created_at', { ascending: true });
 
       if (error || !data || data.length === 0) {
-        return COMMUNITY_GROUPS;
+        return [];
       }
 
       let userMemberships = new Set<string>();
@@ -474,7 +467,7 @@ export const supabaseDataService = {
 
       return data.map((row) => mapGroupFromDb(row, userMemberships));
     } catch {
-      return COMMUNITY_GROUPS;
+      return [];
     }
   },
 
@@ -521,7 +514,7 @@ export const supabaseDataService = {
   // ============================================================================
 
   async fetchChats(): Promise<ChatThread[]> {
-    if (!isSupabaseConfigured()) return INITIAL_CHATS;
+    if (!isSupabaseConfigured()) return [];
 
     try {
       const { data: threads, error: threadErr } = await supabase
@@ -530,7 +523,7 @@ export const supabaseDataService = {
         .order('updated_at', { ascending: false });
 
       if (threadErr || !threads || threads.length === 0) {
-        return INITIAL_CHATS;
+        return [];
       }
 
       const { data: messages, error: msgErr } = await supabase
@@ -550,7 +543,7 @@ export const supabaseDataService = {
 
       return threads.map((t) => mapChatThreadFromDb(t, msgByThread.get(t.id) || []));
     } catch {
-      return INITIAL_CHATS;
+      return [];
     }
   },
 

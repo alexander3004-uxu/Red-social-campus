@@ -1,6 +1,5 @@
 import React from 'react';
 import { ScreenTab } from '../types';
-import { CURRENT_USER } from '../data/mockData';
 import { useTheme } from '../context/ThemeContext';
 
 interface HeaderProps {
@@ -157,11 +156,17 @@ export const Header: React.FC<HeaderProps> = ({
             title="Ver Perfil"
           >
             <div className="relative">
-              <img
-                alt="Profile"
-                className="w-8 h-8 rounded-full object-cover ring-2 ring-[#4f46e5]/30 group-hover:ring-[#3525cd] transition-all"
-                src={userAvatar || CURRENT_USER.avatar}
-              />
+              {userAvatar ? (
+                <img
+                  alt="Profile"
+                  className="w-8 h-8 rounded-full object-cover ring-2 ring-[#4f46e5]/30 group-hover:ring-[#3525cd] transition-all"
+                  src={userAvatar}
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#3525cd] to-[#712ae2] flex items-center justify-center text-white text-xs font-bold ring-2 ring-[#4f46e5]/30">
+                  {(userName || 'U')[0].toUpperCase()}
+                </div>
+              )}
               {isGuest && (
                 <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center text-[8px] text-white font-bold" title="Modo Invitado">
                   👁
@@ -169,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
             <span className="hidden lg:inline text-xs font-bold text-[#131b2e] pr-1">
-              {isGuest ? 'Invitado' : (userName ? userName.split(' ')[0] : 'Sofía')}
+              {isGuest ? 'Invitado' : (userName ? userName.split(' ')[0] : 'Mi Cuenta')}
             </span>
           </button>
         </div>

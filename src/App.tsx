@@ -1,12 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ScreenTab, Post, Story, MarketItem, LiveRoom, CommunityGroup, ChatThread } from './types';
-import {
-  STORIES,
-  INITIAL_MARKET_ITEMS,
-  LIVE_ROOMS,
-  COMMUNITY_GROUPS,
-  INITIAL_CHATS,
-} from './data/mockData';
+
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -100,11 +94,11 @@ function CampusApp() {
 
   // App Data State
   const [posts, setPosts] = useState<Post[]>([]);
-  const [stories, setStories] = useState<Story[]>(STORIES);
-  const [marketItems, setMarketItems] = useState<MarketItem[]>(INITIAL_MARKET_ITEMS);
-  const [groups, setGroups] = useState<CommunityGroup[]>(COMMUNITY_GROUPS);
-  const [liveRooms, setLiveRooms] = useState<LiveRoom[]>(LIVE_ROOMS);
-  const [chats, setChats] = useState<ChatThread[]>(INITIAL_CHATS);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [marketItems, setMarketItems] = useState<MarketItem[]>([]);
+  const [groups, setGroups] = useState<CommunityGroup[]>([]);
+  const [liveRooms, setLiveRooms] = useState<LiveRoom[]>([]);
+  const [chats, setChats] = useState<ChatThread[]>([]);
 
   // Sincronización en tiempo real con Supabase
   useEffect(() => {
@@ -663,6 +657,8 @@ function CampusApp() {
             currentTab={currentTab}
             onNavigate={setCurrentTab}
             unreadMessagesCount={chats.filter((c) => c.unreadCount).length}
+            userAvatar={profile?.avatar_url}
+            userName={profile?.full_name}
           />
         </div>
       )}

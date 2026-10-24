@@ -10,7 +10,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { CURRENT_USER } from '../data/mockData';
+
 import { useTheme } from '../context/ThemeContext';
 
 interface PerfilScreenProps {
@@ -49,13 +49,13 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
   const [editActiveSection, setEditActiveSection] = useState<'info' | 'security' | 'appearance'>('info');
 
   // Formulario de Información Personal
-  const [editFullName, setEditFullName] = useState(profile?.full_name || CURRENT_USER.name);
-  const [editUsername, setEditUsername] = useState(profile?.username || 'sofia.valenzuela');
-  const [editBio, setEditBio] = useState(profile?.bio || CURRENT_USER.bio);
-  const [editUniversity, setEditUniversity] = useState(profile?.university || university || CURRENT_USER.university);
-  const [editFaculty, setEditFaculty] = useState(profile?.faculty || CURRENT_USER.faculty);
-  const [editCareer, setEditCareer] = useState(profile?.career || CURRENT_USER.career);
-  const [editSemester, setEditSemester] = useState(profile?.semester || CURRENT_USER.semester);
+  const [editFullName, setEditFullName] = useState(profile?.full_name || '');
+  const [editUsername, setEditUsername] = useState(profile?.username || '');
+  const [editBio, setEditBio] = useState(profile?.bio || '');
+  const [editUniversity, setEditUniversity] = useState(profile?.university || university || '');
+  const [editFaculty, setEditFaculty] = useState(profile?.faculty || '');
+  const [editCareer, setEditCareer] = useState(profile?.career || '');
+  const [editSemester, setEditSemester] = useState(profile?.semester || '');
 
   // Formulario de Cambio de Contraseña
   const [currentPassword, setCurrentPassword] = useState('');
@@ -81,16 +81,16 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
     setTimeout(() => setFeedbackMessage(null), 4500);
   };
 
-  // Datos consolidados (perfil dinámico o fallback seguro)
-  const currentAvatar = profile?.avatar_url || (isGuest ? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=250' : CURRENT_USER.avatar);
-  const currentName = profile?.full_name || (isGuest ? 'Invitado del Campus' : CURRENT_USER.name);
-  const currentUsername = profile?.username || (isGuest ? 'invitado' : 'sofia.valenzuela');
-  const currentBio = profile?.bio ?? (isGuest ? 'Explorando en modo de solo lectura.' : CURRENT_USER.bio);
-  const currentCareer = profile?.career || (isGuest ? 'Explorador' : CURRENT_USER.career);
-  const currentSemester = profile?.semester || (isGuest ? 'Visitante' : CURRENT_USER.semester);
-  const currentUniversity = profile?.university || university || CURRENT_USER.university;
-  const currentFaculty = profile?.faculty || CURRENT_USER.faculty;
-  const currentStudentId = profile?.student_id || CURRENT_USER.studentId;
+  // Datos consolidados (perfil dinámico, sin datos falsos)
+  const currentAvatar = profile?.avatar_url || '';
+  const currentName = profile?.full_name || (isGuest ? 'Invitado del Campus' : 'Mi cuenta');
+  const currentUsername = profile?.username || (isGuest ? 'invitado' : 'usuario');
+  const currentBio = profile?.bio || (isGuest ? 'Explorando en modo de solo lectura.' : '');
+  const currentCareer = profile?.career || (isGuest ? 'Explorador' : '');
+  const currentSemester = profile?.semester || (isGuest ? 'Visitante' : '');
+  const currentUniversity = profile?.university || university || '';
+  const currentFaculty = profile?.faculty || '';
+  const currentStudentId = profile?.student_id || '';
 
   /**
    * Manejar subida de foto de perfil
@@ -183,42 +183,8 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
     onLogout();
   };
 
-  // Mock list de apuntes para tab
-  const apuntesList = [
-    {
-      id: 'ap-1',
-      title: 'Árboles AVL & Grafos - Resumen Examen Final',
-      course: 'Estructuras de Datos • Prof. Mendoza',
-      tag: 'Gratis',
-      tagColor: 'bg-[#eaddff] text-[#5a00c6]',
-      downloads: 842,
-      rating: '4.9 (54)',
-      icon: 'description',
-      content: 'ÁRBOLES BALANCEADOS AVL Y ALGORITMOS DE GRAFOS...',
-    },
-    {
-      id: 'ap-2',
-      title: 'Diseño de Patrones de Software y Principios SOLID',
-      course: 'Arquitectura de Software • Ciclo 2024-1',
-      tag: 'Destacado',
-      tagColor: 'bg-[#6ffbbe]/25 text-[#005338]',
-      downloads: 519,
-      rating: '5.0 (32)',
-      icon: 'architecture',
-      content: 'PRINCIPIOS SOLID Y PATRONES CREACIONALES...',
-    },
-    {
-      id: 'ap-3',
-      title: 'Guía de Optimización de Consultas SQL y Normalización',
-      course: 'Bases de Datos II • Lab Práctico',
-      tag: '14 pág.',
-      tagColor: 'bg-[#eaedff] text-[#464555]',
-      downloads: 320,
-      rating: '4.8 (18)',
-      icon: 'database',
-      content: 'GUÍA PRÁCTICA DE INDEXACIÓN Y RENDIMIENTO SQL...',
-    },
-  ];
+  // Lista vacía (se llenará con los apuntes reales del usuario)
+  const apuntesList: { id: string; title: string; course: string; tag: string; tagColor: string; downloads: number; rating: string; icon: string; content: string }[] = [];
 
   return (
     <div className="flex flex-col w-full mx-auto pb-20 md:pb-8 relative">
@@ -344,9 +310,9 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
           <section className="relative w-full">
             <div className="relative w-full h-44 overflow-hidden">
               <div
-                className="w-full h-full bg-cover bg-center bg-[#3525cd]/10"
+                className="w-full h-full bg-cover bg-center"
                 style={{
-                  backgroundImage: `url('${CURRENT_USER.banner}')`,
+                  backgroundImage: profile?.banner_url ? `url('${profile.banner_url}')` : 'linear-gradient(135deg, #3525cd 0%, #712ae2 50%, #9b59e9 100%)',
                 }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#faf8ff] via-[#faf8ff]/30 to-transparent" />
@@ -392,11 +358,17 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
             <div className="px-4 -mt-14 relative z-10 flex items-end justify-between">
               <div className="relative group">
                 <div className="w-24 h-24 rounded-full overflow-hidden shadow-md bg-white p-1 relative">
-                  <img
-                    alt={currentName}
-                    className="w-full h-full rounded-full object-cover"
-                    src={currentAvatar}
-                  />
+                  {currentAvatar ? (
+                    <img
+                      alt={currentName}
+                      className="w-full h-full rounded-full object-cover"
+                      src={currentAvatar}
+                    />
+                  ) : (
+                    <div className="w-full h-full rounded-full bg-gradient-to-br from-[#3525cd] to-[#712ae2] flex items-center justify-center text-white text-2xl font-bold">
+                      {currentName.slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
                   {isUploadingAvatar && (
                     <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
                       Subiendo...
@@ -492,13 +464,13 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
           <section className="px-4 mt-4">
             <div className="grid grid-cols-4 gap-1 p-3 bg-[#f2f3ff] rounded-2xl shadow-xs border border-[#eaedff]">
               <div className="flex flex-col items-center text-center p-1">
-                <span className="text-lg font-extrabold text-[#3525cd]">24</span>
+                <span className="text-lg font-extrabold text-[#3525cd]">0</span>
                 <span className="text-[10px] text-[#464555] mt-0.5">Apuntes</span>
               </div>
 
               <div className="flex flex-col items-center text-center p-1">
                 <div className="flex items-center gap-0.5 text-[#712ae2]">
-                  <span className="text-lg font-extrabold">{profile?.reputation || '4.9'}</span>
+                  <span className="text-lg font-extrabold">{profile?.reputation || '5.0'}</span>
                   <span
                     className="material-symbols-outlined text-[14px]"
                     style={{ fontVariationSettings: "'FILL' 1" }}
@@ -510,12 +482,12 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
               </div>
 
               <div className="flex flex-col items-center text-center p-1">
-                <span className="text-lg font-extrabold text-[#131b2e]">18</span>
+                <span className="text-lg font-extrabold text-[#131b2e]">0</span>
                 <span className="text-[10px] text-[#464555] mt-0.5">Ventas</span>
               </div>
 
               <div className="flex flex-col items-center text-center p-1">
-                <span className="text-lg font-extrabold text-[#131b2e]">412</span>
+                <span className="text-lg font-extrabold text-[#131b2e]">0</span>
                 <span className="text-[10px] text-[#464555] mt-0.5">Compañeros</span>
               </div>
             </div>
@@ -533,7 +505,7 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                     : 'bg-[#eaedff] text-[#464555] hover:bg-[#dae2fd]'
                 }`}
               >
-                Apuntes & Recursos (3)
+                Apuntes & Recursos ({apuntesList.length})
               </button>
               <button
                 onClick={() => setActiveTab('market')}
@@ -544,12 +516,19 @@ export const PerfilScreen: React.FC<PerfilScreenProps> = ({
                     : 'bg-[#eaedff] text-[#464555] hover:bg-[#dae2fd]'
                 }`}
               >
-                Artículos en Market (2)
+                Artículos en Market (0)
               </button>
             </div>
 
             {/* Contenido del Tab */}
             <div className="mt-3 space-y-2">
+              {activeTab === 'apuntes' && apuntesList.length === 0 && (
+                <div className="py-10 flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-4xl text-[#c5c2d6]">description</span>
+                  <p className="mt-2 text-sm font-semibold text-[#48465a]">Aún no tienes apuntes</p>
+                  <p className="mt-1 text-xs text-[#858294]">Cuando compartas apuntes o recursos, aparecerán aquí.</p>
+                </div>
+              )}
               {activeTab === 'apuntes' &&
                 apuntesList.map((ap) => (
                   <div

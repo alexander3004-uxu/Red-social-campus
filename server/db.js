@@ -302,7 +302,7 @@ export const db = {
       student_id: profileData.student_id || `UC-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
       reputation: 5.0,
       social_links: profileData.social_links || [],
-      profile_completed: profileData.profile_completed ?? false,
+      profile_completed: profileData.profile_completed ?? true,
       created_at: now,
       updated_at: now,
     };
@@ -397,7 +397,7 @@ export const db = {
                 EXISTS (SELECT 1 FROM user_follows f WHERE f.follower_id = $1 AND f.followed_id = p.user_id) AS is_following
          FROM profiles p
          JOIN users u ON u.id = p.user_id
-         WHERE p.user_id <> $1 AND p.profile_completed = TRUE AND u.is_active = TRUE AND u.role <> 'guest'
+         WHERE p.user_id <> $1 AND u.is_active = TRUE AND u.role <> 'guest'
            AND ($2 = '' OR p.username ILIKE '%' || $2 || '%' OR p.full_name ILIKE '%' || $2 || '%'
                 OR p.university ILIKE '%' || $2 || '%' OR p.career ILIKE '%' || $2 || '%')
          ORDER BY p.full_name ASC LIMIT 30`,
@@ -407,7 +407,7 @@ export const db = {
     }
 
     return inMemoryStore.profiles
-      .filter((profile) => profile.user_id !== currentUserId && profile.profile_completed)
+      .filter((profile) => profile.user_id !== currentUserId)
       .filter((profile) => {
         if (!term) return true;
         return [profile.username, profile.full_name, profile.university, profile.career]
@@ -433,7 +433,7 @@ export const db = {
     }
 
     const target = await this.findProfileByUserId(followedId);
-    if (!target || !target.profile_completed) {
+    if (!target) {
       const error = new Error('No encontramos esa cuenta.');
       error.code = 'PERSON_NOT_FOUND';
       throw error;
@@ -477,8 +477,7 @@ export const db = {
                 EXISTS (SELECT 1 FROM campus_post_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS is_liked
          FROM campus_posts p
          JOIN profiles pr ON pr.user_id = p.user_id
-         WHERE pr.profile_completed = TRUE
-           AND (p.user_id = $1 OR EXISTS (
+         WHERE (p.user_id = $1 OR EXISTS (
              SELECT 1 FROM user_follows f
              WHERE f.follower_id = $1 AND f.followed_id = p.user_id
            ))
@@ -501,7 +500,6 @@ export const db = {
     }
 
     return inMemoryStore.campus_posts
-      .filter((post) => inMemoryStore.profiles.some((profile) => profile.user_id === post.user_id && profile.profile_completed))
       .filter((post) => post.user_id === currentUserId || inMemoryStore.user_follows.some(
         (edge) => edge.follower_id === currentUserId && edge.followed_id === post.user_id
       ))
@@ -552,9 +550,9 @@ export const db = {
 
   async createCampusPost(userId, postData) {
     const profile = await this.findProfileByUserId(userId);
-    if (!profile || !profile.profile_completed) {
-      const error = new Error('Completa tu perfil antes de publicar.');
-      error.code = 'PROFILE_INCOMPLETE';
+    if (!profile) {
+      const error = new Error('Cuenta de usuario no encontrada.');
+      error.code = 'PROFILE_NOT_FOUND';
       throw error;
     }
 

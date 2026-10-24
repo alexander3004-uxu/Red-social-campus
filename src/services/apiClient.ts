@@ -99,6 +99,43 @@ class LocalAuthStore {
       console.warn(e);
     }
   }
+
+  private static FOLLOWS_KEY = 'campuslink_db_follows';
+  private static POSTS_KEY = 'campuslink_db_posts';
+
+  public static getFollows(): Array<{ follower_id: string; followed_id: string }> {
+    try {
+      const data = localStorage.getItem(this.FOLLOWS_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public static saveFollows(follows: Array<{ follower_id: string; followed_id: string }>) {
+    try {
+      localStorage.setItem(this.FOLLOWS_KEY, JSON.stringify(follows));
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+
+  public static getPosts(): any[] {
+    try {
+      const data = localStorage.getItem(this.POSTS_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public static savePosts(posts: any[]) {
+    try {
+      localStorage.setItem(this.POSTS_KEY, JSON.stringify(posts));
+    } catch (e) {
+      console.warn(e);
+    }
+  }
 }
 
 class ApiClient {
@@ -174,8 +211,7 @@ class ApiClient {
       // Si Vercel o el host devolvió códigos de error de ruta o falla de función serverless
       if (
         endpoint.startsWith('/api/') &&
-        ([404, 405, 500, 502, 503, 504].includes(response.status) ||
-          (typeof data?.message === 'string' && data.message.includes('FUNCTION_INVOCATION_FAILED')))
+        [404, 405, 500, 502, 503, 504].includes(response.status)
       ) {
         console.warn(`[ApiClient] Endpoint '${endpoint}' respondió HTTP ${response.status}. Conmutando a fallback local.`);
         return this.handleFallback<T>(endpoint, options);
@@ -186,6 +222,15 @@ class ApiClient {
         data = await response.json();
       } else {
         data = { message: await response.text() };
+      }
+
+      if (
+        endpoint.startsWith('/api/') &&
+        typeof data?.message === 'string' &&
+        data.message.includes('FUNCTION_INVOCATION_FAILED')
+      ) {
+        console.warn(`[ApiClient] Invocación de función falló en '${endpoint}'. Conmutando a fallback local.`);
+        return this.handleFallback<T>(endpoint, options);
       }
 
       // Si es un 403 que no es de nuestra API (ej. error 403 genérico de CDN/servidor estático sin código JSON)
@@ -235,8 +280,94 @@ class ApiClient {
 
     const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
 
-    if (endpoint.startsWith('/api/social/')) {
-      throw new Error('No se pudo conectar con la red social. Revisa que el servidor y la base de datos estén disponibles.');
+    // FALLBACK DE RED SOCIAL (/api/social/*)
+    if (endpoint.startsWith('/api/social/people') && (!options.method || options.method === 'GET')) {
+      const currentSession = LocalAuthStore.getSession();
+      const currentUserId = currentSession?.user?.id;
+      const termMatch = endpoint.match(/[?&]q=([^&]*)/);
+      const term = termMatch ? decodeURIComponent(termMatch[1]).trim().toLowerCase() : '';
+      const follows = LocalAuthStore.getFollows();
+      const users = LocalAuthStore.getUsers();
+
+      const people = users
+        .filter((u) => u.id !== currentUserId)
+        .map((u) => {
+          const prof = u.profile || {};
+          return {
+            id: u.id,
+            username: prof.username || u.email?.split('@')[0] || 'usuario',
+            full_name: prof.full_name || u.full_name || 'Estudiante Universitario',
+            avatar_url: prof.avatar_url || '',
+            university: prof.university || '',
+            career: prof.career || '',
+            is_following: follows.some((f) => f.follower_id === currentUserId && f.followed_id === u.id),
+          };
+        })
+        .filter((p) => {
+          if (!term) return true;
+          return [p.username, p.full_name, p.university, p.career]
+            .some((val) => String(val || '').toLowerCase().includes(term));
+        })
+        .slice(0, 30);
+
+      return Promise.resolve({ success: true, people } as T);
+    }
+
+    if (endpoint.includes('/api/social/people/') && endpoint.endsWith('/follow')) {
+      const currentSession = LocalAuthStore.getSession();
+      const currentUserId = currentSession?.user?.id;
+      if (!currentUserId) {
+        const err: any = new Error('Inicia sesión para interactuar con otros usuarios.');
+        err.status = 401;
+        return Promise.reject(err);
+      }
+
+      const parts = endpoint.split('/');
+      const followIdx = parts.indexOf('follow');
+      const targetUserId = decodeURIComponent(parts[followIdx - 1]);
+      let follows = LocalAuthStore.getFollows();
+
+      if (options.method === 'POST') {
+        if (!follows.some((f) => f.follower_id === currentUserId && f.followed_id === targetUserId)) {
+          follows.push({ follower_id: currentUserId, followed_id: targetUserId });
+          LocalAuthStore.saveFollows(follows);
+        }
+        return Promise.resolve({ success: true, following: true, message: 'Amistad actualizada.' } as T);
+      }
+
+      if (options.method === 'DELETE') {
+        follows = follows.filter((f) => !(f.follower_id === currentUserId && f.followed_id === targetUserId));
+        LocalAuthStore.saveFollows(follows);
+        return Promise.resolve({ success: true, following: false, message: 'Has dejado de seguir.' } as T);
+      }
+    }
+
+    if (endpoint === '/api/social/posts' && (!options.method || options.method === 'GET')) {
+      const posts = LocalAuthStore.getPosts();
+      return Promise.resolve({ success: true, posts } as T);
+    }
+
+    if (endpoint === '/api/social/posts' && options.method === 'POST') {
+      const currentSession = LocalAuthStore.getSession();
+      const prof = currentSession?.profile || {};
+      const newPost = {
+        id: `post_${Date.now()}`,
+        authorName: prof.full_name || 'Estudiante Universitario',
+        authorAvatar: prof.avatar_url || '',
+        authorTag: prof.career || 'CampusLink',
+        authorTagColor: 'bg-[#e2dfff] text-[#3323cc]',
+        timeAgo: 'Justo ahora',
+        content: body.content || '',
+        likes: 0,
+        isLiked: false,
+        comments: 0,
+        created_at: new Date().toISOString(),
+        user_id: currentSession?.user?.id,
+      };
+      const posts = LocalAuthStore.getPosts();
+      posts.unshift(newPost);
+      LocalAuthStore.savePosts(posts);
+      return Promise.resolve({ success: true, post: newPost } as T);
     }
 
     // 1. REGISTRO TRADICIONAL
@@ -267,7 +398,7 @@ class ApiClient {
         student_id: `UC-2026-${Math.floor(10000 + Math.random() * 90000)}`,
         reputation: 5.0,
         social_links: [],
-        profile_completed: false,
+        profile_completed: true,
       };
 
       const newUser = {

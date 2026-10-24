@@ -28,19 +28,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
   useEffect(() => {
     if (!isAuthenticated) return;
     if (isGuest) return;
-    if (profile?.profile_completed) {
+    if (profile?.profile_completed && profile?.university && profile?.career) {
       onLoginSuccess(profile.university);
       return;
     }
-    setFullName(profile?.full_name || '');
-    setUsername(profile?.username || user?.email.split('@')[0] || '');
-    setUniversity(profile?.university || '');
-    setFaculty(profile?.faculty || '');
-    setCareer(profile?.career || '');
-    setSemester(profile?.semester || '');
-    setBio(profile?.bio || '');
+    const currentFullName = profile?.full_name || fullName || '';
+    const suggestedUsername = (profile?.username && !profile.username.startsWith('campus_'))
+      ? profile.username
+      : (email ? email.split('@')[0] : (user?.email?.split('@')[0] || ''));
+
+    setFullName(currentFullName);
+    if (suggestedUsername) setUsername(suggestedUsername);
+    if (profile?.university) setUniversity(profile.university);
+    if (profile?.faculty) setFaculty(profile.faculty);
+    if (profile?.career) setCareer(profile.career);
+    if (profile?.semester) setSemester(profile.semester);
+    if (profile?.bio) setBio(profile.bio);
     setStep('profile');
-  }, [isAuthenticated, isGuest, profile?.profile_completed, user?.email]);
+  }, [isAuthenticated, isGuest, profile?.profile_completed, profile?.university, profile?.career, user?.email]);
 
   const runAuthAction = async (action: () => Promise<unknown>) => {
     setErrorMessage(null);
@@ -72,18 +77,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
     }
 
     void runAuthAction(async () => {
-      const temporaryUsername = `campus_${Date.now().toString(36)}`;
+      const emailPrefix = email.trim().split('@')[0]?.replace(/[^a-zA-Z0-9._-]/g, '') || 'usuario';
       const result = await register({
         email: email.trim(),
         password,
         full_name: fullName.trim(),
-        username: temporaryUsername,
+        username: emailPrefix,
         university: '',
         faculty: '',
         career: '',
         semester: '',
       });
       if (!result?.success) throw new Error(result?.message || 'No se pudo crear la cuenta.');
+
+      // Transición inmediata al panel de datos personales del perfil
+      setUsername(emailPrefix);
+      setStep('profile');
     });
   };
 

@@ -12,6 +12,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { supabase } from '../supabaseClient';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
@@ -112,32 +113,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   /**
-   * Acceso con Google OAuth 2.0
+   * Acceso con Google OAuth 2.0 (Supabase)
    */
-  const handleGoogleSignIn = async () => {
+  const handleGoogleLogin = async () => {
     setIsLoading(true);
     setErrorMessage(null);
-    try {
-      // Simulación de Google Identity Services Token (compatible con backend verifyIdToken)
-      const mockEmail = authMode === 'login' && loginEmail.includes('@')
-        ? loginEmail
-        : `estudiante.${Date.now().toString(36)}@ucentral.edu`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
 
-      const mockPayload = {
-        sub: `google_oauth_${Date.now()}`,
-        email: mockEmail,
-        name: regFullName || 'Estudiante Campus Google',
-        picture: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-        email_verified: true,
-      };
-      const mockIdToken = `eyJhbGciOiJSUzI1NiJ9.${btoa(JSON.stringify(mockPayload))}.mock_signature`;
-
-      await loginWithGoogle(mockIdToken);
-      triggerToast('¡Autenticado con Google Workspace exitosamente!');
-      setTimeout(() => onLoginSuccess(), 400);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Error en la autenticación con Google.');
-    } finally {
+    if (error) {
+      console.error("Error al iniciar sesión con Google:", error.message);
+      setErrorMessage(error.message || 'Error al iniciar sesión con Google.');
       setIsLoading(false);
     }
   };
@@ -596,10 +586,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
         {/* Botón Oficial Google OAuth 2.0 */}
         <button
-          onClick={handleGoogleSignIn}
-          disabled={isLoading}
-          className="w-full h-11 bg-white hover:bg-[#eaedff] transition-all rounded-xl px-4 flex items-center justify-center gap-3 shadow-xs active:scale-[0.99] border border-[#e2e7ff]"
           type="button"
+          onClick={handleGoogleLogin}
+          disabled={isLoading}
+          className="btn-google w-full h-11 bg-white hover:bg-[#eaedff] transition-all rounded-xl px-4 flex items-center justify-center gap-3 shadow-xs active:scale-[0.99] border border-[#e2e7ff]"
         >
           <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
             <path
@@ -620,7 +610,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             />
           </svg>
           <span className="text-xs text-[#131b2e] font-semibold">
-            Google Workspace Institucional
+            Iniciar sesión con Google
           </span>
         </button>
 

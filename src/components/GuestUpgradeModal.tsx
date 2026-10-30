@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../supabaseClient';
 
 interface GuestUpgradeModalProps {
   isOpen: boolean;
@@ -26,25 +27,23 @@ export const GuestUpgradeModal: React.FC<GuestUpgradeModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSimulatedGoogleSignIn = async () => {
+  const handleGoogleLogin = async () => {
     setIsProcessingGoogle(true);
     setErrorMessage(null);
     try {
-      // Simulación de Google Identity Services token para prueba o flujo de un solo toque
-      // En entorno de producción, utiliza el token real emitido por google.accounts.id
-      const mockGoogleSub = `g_upgrade_${Date.now()}`;
-      const mockPayload = {
-        sub: mockGoogleSub,
-        email: `estudiante.${Date.now().toString(36)}@ucentral.edu`,
-        name: 'Estudiante Google Campus',
-        picture: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-        email_verified: true,
-      };
-      const mockJwt = `header.${btoa(JSON.stringify(mockPayload))}.signature`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
 
-      await loginWithGoogle(mockJwt);
-      onClose();
+      if (error) {
+        console.error("Error al iniciar sesión con Google:", error.message);
+        setErrorMessage(error.message || 'Error al conectar con Google.');
+      }
     } catch (err: any) {
+      console.error("Error al iniciar sesión con Google:", err.message);
       setErrorMessage(err.message || 'Error al conectar con Google Identity.');
     } finally {
       setIsProcessingGoogle(false);
@@ -122,10 +121,10 @@ export const GuestUpgradeModal: React.FC<GuestUpgradeModalProps> = ({
         <div className="flex flex-col space-y-2.5 pt-1">
           {/* Opción 1: Unirse con Google OAuth (1 Clic) */}
           <button
-            onClick={handleSimulatedGoogleSignIn}
+            onClick={handleGoogleLogin}
             disabled={isProcessingGoogle}
             type="button"
-            className="w-full h-12 bg-white hover:bg-[#faf8ff] active:scale-[0.99] border border-[#d6d0ff] rounded-2xl px-4 flex items-center justify-center gap-3 shadow-xs transition-all font-semibold text-xs text-[#131b2e]"
+            className="btn-google w-full h-12 bg-white hover:bg-[#faf8ff] active:scale-[0.99] border border-[#d6d0ff] rounded-2xl px-4 flex items-center justify-center gap-3 shadow-xs transition-all font-semibold text-xs text-[#131b2e]"
           >
             <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
               <path

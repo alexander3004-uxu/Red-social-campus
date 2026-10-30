@@ -302,4 +302,16 @@ html.dark [data-qr-card] .text-\[\#3525cd\] {
   color: #3525cd !important;
 }
 
+/* Botón Iniciar sesión con Google */
+.btn-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+
 

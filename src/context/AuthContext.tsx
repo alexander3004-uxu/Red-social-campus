@@ -6,6 +6,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../services/apiClient';
+import { supabase } from '../supabaseClient';
 
 export interface User {
   id: string;
@@ -151,6 +152,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   /**
+   * Escuchar Cambios de Estado de la Sesión en Supabase (Google OAuth)
+   */
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        console.log("Usuario autenticado:", session.user);
+
+        const email = session.user.email || '';
+        const name =
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          (email ? email.split('@')[0] : 'Estudiante Campus');
+        const avatar =
+          session.user.user_metadata?.avatar_url ||
+          session.user.user_metadata?.picture ||
+          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250';
+        const cleanUsername = email
+          ? email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '')
+          : `user_${session.user.id.slice(0, 8)}`;
+
+        const authUser: User = {
+          id: session.user.id,
+          email,
+          role: (session.user.user_metadata?.role as any) || 'student',
+          is_verified: true,
+          isGuest: false,
+        };
+
+        const authProfile: UserProfile = {
+          id: `prof_${session.user.id}`,
+          user_id: session.user.id,
+          username: cleanUsername,
+          full_name: name,
+          bio: session.user.user_metadata?.bio || 'Estudiante conectado a través de Google Workspace.',
+          avatar_url: avatar,
+          banner_url: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&q=80&w=1200',
+          university: session.user.user_metadata?.university || 'Universidad Central (Sede Principal)',
+          faculty: session.user.user_metadata?.faculty || 'Facultad de Ingeniería',
+          career: session.user.user_metadata?.career || 'Ingeniería de Software',
+          semester: session.user.user_metadata?.semester || '1er Semestre',
+          student_id: session.user.user_metadata?.student_id || `UC-G-${session.user.id.slice(0, 4)}`,
+          reputation: 5.0,
+          social_links: [],
+          email,
+          role: 'student',
+          is_verified: true,
+        };
+
+        setUser(authUser);
+        setProfile(authProfile);
+        setToken(session.access_token);
+        apiClient.setToken(session.access_token);
+        setGuestSessionId(null);
+        try {
+          localStorage.removeItem('campus_guest_session_id');
+        } catch {}
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+        setToken(null);
+        apiClient.setToken(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  /**
    * Inicio de Sesión Tradicional
    */
   const loginWithEmail = async (email: string, password: string, rememberMe = true) => {
@@ -254,6 +323,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Cerrar Sesión
    */
   const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {}
     try {
       await apiClient.auth.logout();
     } catch {

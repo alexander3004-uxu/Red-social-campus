@@ -34,6 +34,7 @@ import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { socketClient } from './services/socketClient';
 import { supabaseDataService } from './services/supabaseDataService';
+import { supabase } from './supabaseClient';
 
 function CampusApp() {
   const {
@@ -97,6 +98,20 @@ function CampusApp() {
       }
     }
   }, [token, isGuest]);
+
+  // Escuchar cambios de estado de la sesión de Supabase (OAuth Google)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        console.log("Usuario autenticado:", session.user);
+        if (currentTab === 'login') {
+          setCurrentTab('feed');
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [currentTab]);
 
   // App Data State
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);

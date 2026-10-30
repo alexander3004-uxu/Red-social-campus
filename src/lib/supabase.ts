@@ -7,10 +7,11 @@
  * - VITE_SUPABASE_ANON_KEY: Clave pública 'anon' de tu proyecto en Supabase
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { supabase } from '../supabaseClient';
 
-const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 /**
  * Valida si las credenciales de Supabase han sido configuradas
@@ -26,22 +27,7 @@ export const isSupabaseConfigured = (): boolean => {
 };
 
 // Instancia de Supabase Client (singleton)
-export const supabase: SupabaseClient = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key',
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-    realtime: {
-      params: {
-        eventsPerSecond: 10,
-      },
-    },
-  }
-);
+export { supabase };
 
 /**
  * Helper para obtener el usuario autenticado actualmente en Supabase

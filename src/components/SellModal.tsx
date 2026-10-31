@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MarketItem } from '../types';
-import { CURRENT_USER } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
 
 interface SellModalProps {
   isOpen: boolean;
@@ -13,6 +13,7 @@ export const SellModal: React.FC<SellModalProps> = ({
   onClose,
   onAddItem,
 }) => {
+  const { profile } = useAuth();
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('25');
   const [category, setCategory] = useState('Libros y Manuales');
@@ -31,11 +32,11 @@ export const SellModal: React.FC<SellModalProps> = ({
       price: parseFloat(price) || 20,
       image:
         'https://lh3.googleusercontent.com/aida-public/AB6AXuAMPCtTazJmP77sH_t1dVYaF7l3m3NGBSAJcAMUV_p1TOTfEsYkWaEDtdEHGFnY1ugXgjBrrXuUKzm3O7Q74ZKk4EDYiXjPXjijzXmd4URhNl6P18KWBVoi7rnf26lKcGO2Ov03reyFRp3JIYJT67svx1ndoZgiGzwFZu2kpPTx7BvZtoXigNOr61gV2Dr7cyOxh7YNECV_b7rCBX21EzWPbz7X8ZfavbT9B_37TV9CvMgRxPPJCe_T',
-      faculty: CURRENT_USER.faculty.split(' ')[0],
+      faculty: profile?.faculty ? profile.faculty.split(' ')[0] : (profile?.career ? profile.career.split(' ')[0] : 'Campus'),
       location: location,
       condition: condition,
       conditionColor: 'bg-[#6ffbbe]/25 text-[#005338]',
-      seller: CURRENT_USER.name.split(' ')[0] + ' ' + CURRENT_USER.name.split(' ')[1]?.[0] + '.',
+      seller: profile?.full_name || 'Estudiante Universitario',
       rating: 5.0,
       category: category,
       isFav: false,

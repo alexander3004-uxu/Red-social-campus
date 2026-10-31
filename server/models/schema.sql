@@ -55,9 +55,59 @@ CREATE TABLE IF NOT EXISTS profiles (
     student_id VARCHAR(50),                     -- Matrícula o carnet estudiantil
     reputation NUMERIC(3, 1) DEFAULT 5.0,
     social_links JSONB DEFAULT '[]'::jsonb,     -- [{ platform: 'github', url: '...' }]
+    profile_completed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Publicaciones compartidas en el feed y relaciones de seguimiento entre cuentas.
+CREATE TABLE IF NOT EXISTS campus_posts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    post_data JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_campus_posts_created_at ON campus_posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_campus_posts_user_created ON campus_posts(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS campus_post_likes (
+    post_id UUID NOT NULL REFERENCES campus_posts(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_follows (
+    follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    followed_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (follower_id, followed_id),
+    CONSTRAINT user_follows_no_self CHECK (follower_id <> followed_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_follows_followed ON user_follows(followed_id, follower_id);
+
+-- ==============================================================================
+-- 3.1 TABLA DE SOLICITUDES DE AMISTAD (FRIEND_REQUESTS)
+-- Gestión de invitaciones, estados (pending, accepted, rejected, cancelled)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS friend_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'cancelled')),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_friend_request UNIQUE (sender_id, receiver_id),
+    CONSTRAINT friend_request_no_self CHECK (sender_id <> receiver_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_friend_requests_receiver ON friend_requests(receiver_id, status);
+CREATE INDEX IF NOT EXISTS idx_friend_requests_sender ON friend_requests(sender_id, status);
 
 -- ==============================================================================
 -- 4. TABLA DE SESIONES Y REFRESH TOKENS (USER_SESSIONS)

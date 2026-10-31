@@ -15,6 +15,7 @@ import cookieParser from 'cookie-parser';
 
 import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
+import socialRoutes from './routes/social.routes.js';
 
 dotenv.config();
 
@@ -83,6 +84,8 @@ app.use('/auth', authRoutes);
 
 app.use('/api/users', userRoutes);
 app.use('/users', userRoutes);
+
+app.use('/api/social', socialRoutes);
 
 // Manejador global de rutas no encontradas (404)
 app.use((req, res) => {

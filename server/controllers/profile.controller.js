@@ -221,7 +221,7 @@ export async function changePassword(req, res) {
       return res.status(400).json({
         success: false,
         code: 'NO_PASSWORD_SET',
-        message: 'Tu cuenta está autenticada mediante Google OAuth y no requiere cambio de contraseña local.',
+        message: 'Esta cuenta aún no tiene una contraseña de acceso.',
       });
     }
 

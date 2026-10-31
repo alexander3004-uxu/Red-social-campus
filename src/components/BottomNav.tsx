@@ -1,17 +1,19 @@
 import React from 'react';
 import { ScreenTab } from '../types';
-import { CURRENT_USER } from '../data/mockData';
-
 interface BottomNavProps {
   currentTab: ScreenTab;
   onNavigate: (tab: ScreenTab) => void;
   unreadMessagesCount?: number;
+  userAvatar?: string;
+  userName?: string;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
   currentTab,
   onNavigate,
   unreadMessagesCount = 3,
+  userAvatar,
+  userName,
 }) => {
   if (currentTab === 'login') return null;
 
@@ -134,11 +136,17 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             className={`w-6 h-6 rounded-full overflow-hidden ring-1 ${currentTab === 'perfil' ? 'ring-[#3525cd] ring-2' : 'ring-[#c7c4d8]'
               }`}
           >
-            <img
-              alt="Profile"
-              className="w-full h-full object-cover"
-              src={CURRENT_USER.avatar}
-            />
+            {userAvatar ? (
+              <img
+                alt="Profile"
+                className="w-full h-full object-cover"
+                src={userAvatar}
+              />
+            ) : (
+              <div className="w-full h-full bg-[#3525cd] flex items-center justify-center text-white text-[9px] font-bold">
+                {(userName || 'U')[0].toUpperCase()}
+              </div>
+            )}
           </div>
           <span className="text-[10px] font-bold">Perfil</span>
         </button>

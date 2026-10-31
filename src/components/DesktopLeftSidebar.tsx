@@ -1,6 +1,5 @@
 import React from 'react';
 import { ScreenTab } from '../types';
-import { CURRENT_USER } from '../data/mockData';
 import { useTheme } from '../context/ThemeContext';
 
 interface DesktopLeftSidebarProps {
@@ -46,11 +45,17 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
       <div className="bg-white rounded-3xl p-4 shadow-sm border border-[#eaedff] flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <img
-              src={userAvatar || CURRENT_USER.avatar}
-              alt={userName || CURRENT_USER.name}
-              className="w-12 h-12 rounded-full object-cover ring-2 ring-[#3525cd]/20"
-            />
+            {userAvatar ? (
+              <img
+                src={userAvatar}
+                alt={userName || 'Estudiante'}
+                className="w-12 h-12 rounded-full object-cover ring-2 ring-[#3525cd]/20"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#3525cd] to-[#712ae2] flex items-center justify-center text-white text-base font-bold ring-2 ring-[#3525cd]/20">
+                {(userName || 'U')[0].toUpperCase()}
+              </div>
+            )}
             <span
               className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full ring-2 ring-white ${
                 isGuest ? 'bg-amber-500' : 'bg-[#006e4b]'
@@ -60,13 +65,13 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
           </div>
           <div className="flex flex-col min-w-0">
             <h3 className="text-sm font-bold text-[#131b2e] truncate">
-              {userName || CURRENT_USER.name}
+              {userName || 'Estudiante Universitario'}
             </h3>
             <span className="text-[11px] text-[#464555] truncate">
-              {isGuest ? 'Modo Lectura (Invitado)' : (userCareer || CURRENT_USER.career)}
+              {isGuest ? 'Modo Lectura (Invitado)' : (userCareer || 'Estudiante')}
             </span>
             <span className="text-[10px] text-[#3525cd] font-semibold truncate">
-              {selectedCampus || CURRENT_USER.university}
+              {selectedCampus || 'Campus Universitario'}
             </span>
           </div>
         </div>

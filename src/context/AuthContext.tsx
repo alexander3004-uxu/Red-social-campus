@@ -1,7 +1,7 @@
 /**
  * src/context/AuthContext.tsx
  * Proveedor de Contexto Global de Autenticación, Sesiones y Perfiles.
- * Maneja el ciclo de vida del usuario registrado, autenticación con Google y modo invitado.
+ * Maneja el ciclo de vida del usuario registrado, autenticación por contraseña y perfiles.
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -34,6 +34,7 @@ export interface UserProfile {
   email?: string;
   role?: string;
   is_verified?: boolean;
+  profile_completed?: boolean;
 }
 
 export interface AuthContextType {
@@ -54,8 +55,6 @@ export interface AuthContextType {
   // Acciones de autenticación
   loginWithEmail: (email: string, password: string, rememberMe?: boolean) => Promise<any>;
   register: (formData: any) => Promise<any>;
-  loginWithGoogle: (idToken?: string) => Promise<any>;
-  signInWithGoogle: () => Promise<any>;
   loginAsGuest: () => Promise<any>;
   logout: () => Promise<void>;
   // Gestión de perfil
@@ -287,46 +286,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Autenticación con Google (Supabase OAuth)
-   */
-  const loginWithGoogle = async (idToken?: string) => {
-    setIsLoading(true);
-    try {
-      // Compatibilidad con idToken simulado previo si se proporciona
-      if (typeof idToken === 'string' && idToken.length > 0 && !idToken.startsWith('sb_')) {
-        const res = await apiClient.auth.google({
-          id_token: idToken,
-          guestSessionId: guestSessionId || undefined,
-        });
-        if (res && res.success) {
-          apiClient.setToken(res.token);
-          setToken(res.token);
-          setUser(res.user);
-          setProfile(res.profile);
-          setGuestSessionId(null);
-          try {
-            localStorage.removeItem('campus_guest_session_id');
-          } catch {}
-          closeUpgradeModal();
-        }
-        return res;
-      }
-
-      // Flujo oficial con Supabase Google OAuth
-      return await supabaseSignInWithGoogle();
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * Acceso directo a signInWithGoogle de Supabase
-   */
-  const signInWithGoogle = async () => {
-    return loginWithGoogle();
-  };
-
-  /**
    * Acceso en Modo Invitado
    */
   const loginAsGuest = async () => {
@@ -430,8 +389,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         closeUpgradeModal,
         loginWithEmail,
         register,
-        loginWithGoogle,
-        signInWithGoogle,
         loginAsGuest,
         logout,
         updateProfile,

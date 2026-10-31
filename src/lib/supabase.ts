@@ -7,11 +7,10 @@
  * - VITE_SUPABASE_ANON_KEY: Clave pública 'anon' de tu proyecto en Supabase
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
-import { supabase } from '../supabaseClient';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
 
 /**
  * Valida si las credenciales de Supabase han sido configuradas
@@ -27,7 +26,22 @@ export const isSupabaseConfigured = (): boolean => {
 };
 
 // Instancia de Supabase Client (singleton)
-export { supabase };
+export const supabase: SupabaseClient = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
+  }
+);
 
 /**
  * Helper para obtener el usuario autenticado actualmente en Supabase
@@ -37,6 +51,29 @@ export async function getSupabaseUser() {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return null;
   return user;
+}
+
+/**
+ * Inicia el flujo de autenticación con Google mediante Supabase OAuth
+ */
+export async function signInWithGoogle() {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin,
+    },
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Cierra la sesión activa en Supabase
+ */
+export async function signOutFromSupabase() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
 }
 
 /**

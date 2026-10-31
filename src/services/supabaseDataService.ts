@@ -109,10 +109,6 @@ export const supabaseDataService = {
     return () => {};
   },
 
-  async fetchMarketItems(_userId?: string): Promise<MarketItem[]> {
-    return INITIAL_MARKET_ITEMS;
-  },
-
   // ============================================================================
   // MARKETPLACE
   // ============================================================================
@@ -150,10 +146,6 @@ export const supabaseDataService = {
 
   subscribeToMarket(_onInsert: any, _onUpdate: any) {
     return () => {};
-  },
-
-  async fetchGroups(_userId?: string): Promise<CommunityGroup[]> {
-    return COMMUNITY_GROUPS;
   },
 
   // ============================================================================

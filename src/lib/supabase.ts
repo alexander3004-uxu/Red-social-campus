@@ -54,6 +54,29 @@ export async function getSupabaseUser() {
 }
 
 /**
+ * Inicia el flujo de autenticación con Google mediante Supabase OAuth
+ */
+export async function signInWithGoogle() {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin,
+    },
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Cierra la sesión activa en Supabase
+ */
+export async function signOutFromSupabase() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+/**
  * Helper para subir imágenes/archivos a Supabase Storage
  * @param bucket Nombre del bucket (ej. 'avatars', 'posts', 'documents')
  * @param path Ruta y nombre de archivo dentro del bucket

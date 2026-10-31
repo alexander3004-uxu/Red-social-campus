@@ -112,30 +112,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   /**
-   * Acceso con Google OAuth 2.0
+   * Acceso con Google OAuth 2.0 (Supabase)
    */
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      // Simulación de Google Identity Services Token (compatible con backend verifyIdToken)
-      const mockEmail = authMode === 'login' && loginEmail.includes('@')
-        ? loginEmail
-        : `estudiante.${Date.now().toString(36)}@ucentral.edu`;
-
-      const mockPayload = {
-        sub: `google_oauth_${Date.now()}`,
-        email: mockEmail,
-        name: regFullName || 'Estudiante Campus Google',
-        picture: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-        email_verified: true,
-      };
-      const mockIdToken = `eyJhbGciOiJSUzI1NiJ9.${btoa(JSON.stringify(mockPayload))}.mock_signature`;
-
-      await loginWithGoogle(mockIdToken);
-      triggerToast('¡Autenticado con Google Workspace exitosamente!');
-      setTimeout(() => onLoginSuccess(), 400);
+      await loginWithGoogle();
+      triggerToast('Conectando con Google...');
     } catch (err: any) {
+      console.error('Error Google OAuth:', err);
       setErrorMessage(err.message || 'Error en la autenticación con Google.');
     } finally {
       setIsLoading(false);
@@ -620,7 +606,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             />
           </svg>
           <span className="text-xs text-[#131b2e] font-semibold">
-            Google Workspace Institucional
+            Iniciar sesión con Google
           </span>
         </button>
 

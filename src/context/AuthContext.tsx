@@ -1,11 +1,12 @@
 /**
  * src/context/AuthContext.tsx
  * Proveedor de Contexto Global de Autenticación, Sesiones y Perfiles.
- * Maneja el ciclo de vida del usuario registrado, autenticación por contraseña y perfiles.
+ * Maneja el ciclo de vida del usuario registrado, autenticación con Google y modo invitado.
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiClient } from '../services/apiClient';
+import { supabase, isSupabaseConfigured, signInWithGoogle as supabaseSignInWithGoogle, signOutFromSupabase } from '../supabaseClient';
 
 export interface User {
   id: string;
@@ -33,7 +34,6 @@ export interface UserProfile {
   email?: string;
   role?: string;
   is_verified?: boolean;
-  profile_completed?: boolean;
 }
 
 export interface AuthContextType {
@@ -54,6 +54,8 @@ export interface AuthContextType {
   // Acciones de autenticación
   loginWithEmail: (email: string, password: string, rememberMe?: boolean) => Promise<any>;
   register: (formData: any) => Promise<any>;
+  loginWithGoogle: (idToken?: string) => Promise<any>;
+  signInWithGoogle: () => Promise<any>;
   loginAsGuest: () => Promise<any>;
   logout: () => Promise<void>;
   // Gestión de perfil
@@ -65,6 +67,49 @@ export interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper para convertir el usuario de Supabase al formato de CampusLink
+const createCampusUserFromSupabase = (sbUser: any): { user: User; profile: UserProfile } => {
+  const email = sbUser.email || '';
+  const fullName =
+    sbUser.user_metadata?.full_name ||
+    sbUser.user_metadata?.name ||
+    (email ? email.split('@')[0] : 'Estudiante Google');
+  const avatarUrl =
+    sbUser.user_metadata?.avatar_url ||
+    sbUser.user_metadata?.picture ||
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250';
+
+  const userObj: User = {
+    id: sbUser.id,
+    email: email,
+    role: 'student',
+    is_verified: true,
+    isGuest: false,
+  };
+
+  const profileObj: UserProfile = {
+    id: `prof_${sbUser.id}`,
+    user_id: sbUser.id,
+    username: email ? email.split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '') : `user_${sbUser.id.slice(0, 6)}`,
+    full_name: fullName,
+    bio: 'Estudiante autenticado con cuenta Google Universitaria.',
+    avatar_url: avatarUrl,
+    banner_url: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&q=80&w=1200',
+    university: localStorage.getItem('campuslink_user_university') || 'Universidad Central (Sede Principal)',
+    faculty: 'Facultad de Ingeniería',
+    career: 'Ingeniería de Software',
+    semester: '1er Semestre',
+    student_id: `CAMPUS-${sbUser.id.slice(0, 8).toUpperCase()}`,
+    reputation: 5.0,
+    social_links: [],
+    email: email,
+    role: 'student',
+    is_verified: true,
+  };
+
+  return { user: userObj, profile: profileObj };
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -112,8 +157,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let isMounted = true;
 
-    async function checkSession() {
+    async function initSession() {
       try {
+        // 1. Primero verificar si hay una sesión activa en Supabase (ej. retorno de Google OAuth)
+        if (isSupabaseConfigured()) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && session.user && isMounted) {
+            const { user: sbUser, profile: sbProfile } = createCampusUserFromSupabase(session.user);
+            setUser(sbUser);
+            setProfile(sbProfile);
+            setToken(session.access_token);
+            apiClient.setToken(session.access_token);
+            setIsInitialLoading(false);
+            return;
+          }
+        }
+
+        // 2. Si no hay sesión de Supabase, verificar token local / apiClient
         const storedToken = apiClient.getToken();
         if (!storedToken) {
           if (isMounted) setIsInitialLoading(false);
@@ -144,9 +204,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    checkSession();
+    initSession();
+
+    // Escuchar cambios de estado en Supabase en tiempo real (login OAuth, refresh, logout)
+    let authSubscription: { unsubscribe: () => void } | null = null;
+    if (isSupabaseConfigured()) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!isMounted) return;
+        if (session && session.user) {
+          const { user: sbUser, profile: sbProfile } = createCampusUserFromSupabase(session.user);
+          setUser(sbUser);
+          setProfile(sbProfile);
+          setToken(session.access_token);
+          apiClient.setToken(session.access_token);
+          setGuestSessionId(null);
+        } else if (_event === 'SIGNED_OUT') {
+          setUser(null);
+          setProfile(null);
+          setToken(null);
+          apiClient.setToken(null);
+        }
+      });
+      authSubscription = subscription;
+    }
+
     return () => {
       isMounted = false;
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
     };
   }, []);
 
@@ -201,6 +287,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
+   * Autenticación con Google (Supabase OAuth)
+   */
+  const loginWithGoogle = async (idToken?: string) => {
+    setIsLoading(true);
+    try {
+      // Compatibilidad con idToken simulado previo si se proporciona
+      if (typeof idToken === 'string' && idToken.length > 0 && !idToken.startsWith('sb_')) {
+        const res = await apiClient.auth.google({
+          id_token: idToken,
+          guestSessionId: guestSessionId || undefined,
+        });
+        if (res && res.success) {
+          apiClient.setToken(res.token);
+          setToken(res.token);
+          setUser(res.user);
+          setProfile(res.profile);
+          setGuestSessionId(null);
+          try {
+            localStorage.removeItem('campus_guest_session_id');
+          } catch {}
+          closeUpgradeModal();
+        }
+        return res;
+      }
+
+      // Flujo oficial con Supabase Google OAuth
+      return await supabaseSignInWithGoogle();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Acceso directo a signInWithGoogle de Supabase
+   */
+  const signInWithGoogle = async () => {
+    return loginWithGoogle();
+  };
+
+  /**
    * Acceso en Modo Invitado
    */
   const loginAsGuest = async () => {
@@ -231,6 +357,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await apiClient.auth.logout();
     } catch {
       // Ignorar errores de red en logout
+    }
+    try {
+      if (isSupabaseConfigured()) {
+        await signOutFromSupabase();
+      }
+    } catch {
+      // Ignorar errores en signOut de Supabase
     } finally {
       apiClient.setToken(null);
       setUser(null);
@@ -297,6 +430,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         closeUpgradeModal,
         loginWithEmail,
         register,
+        loginWithGoogle,
+        signInWithGoogle,
         loginAsGuest,
         logout,
         updateProfile,

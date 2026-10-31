@@ -24,12 +24,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => onNavigate('feed')}
           aria-current={currentTab === 'feed' ? 'page' : undefined}
-          className={`flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${
-            currentTab === 'feed'
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${currentTab === 'feed'
               ? 'text-[#3525cd] font-bold'
               : 'text-[#464555] hover:text-[#131b2e]'
-          }`}
+            }`}
         >
+          {currentTab === 'feed' && (
+            <span className="absolute top-0 w-6 h-1 rounded-full bg-[#3525cd] animate-in fade-in" />
+          )}
           <span
             className="material-symbols-outlined text-[24px]"
             style={{
@@ -45,12 +47,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => onNavigate('grupos')}
           aria-current={currentTab === 'grupos' ? 'page' : undefined}
-          className={`flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${
-            currentTab === 'grupos'
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${currentTab === 'grupos'
               ? 'text-[#3525cd] font-bold'
               : 'text-[#464555] hover:text-[#131b2e]'
-          }`}
+            }`}
         >
+          {currentTab === 'grupos' && (
+            <span className="absolute top-0 w-6 h-1 rounded-full bg-[#3525cd] animate-in fade-in" />
+          )}
           <span
             className="material-symbols-outlined text-[24px]"
             style={{
@@ -66,12 +70,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => onNavigate('market')}
           aria-current={currentTab === 'market' ? 'page' : undefined}
-          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${
-            currentTab === 'market'
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${currentTab === 'market'
               ? 'text-[#3525cd] font-bold'
               : 'text-[#464555] hover:text-[#131b2e]'
-          }`}
+            }`}
         >
+          {currentTab === 'market' && (
+            <span className="absolute top-0 w-6 h-1 rounded-full bg-[#3525cd] animate-in fade-in" />
+          )}
           <span
             className="material-symbols-outlined text-[24px]"
             style={{
@@ -90,12 +96,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => onNavigate('mensajes')}
           aria-current={currentTab === 'mensajes' ? 'page' : undefined}
-          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${
-            currentTab === 'mensajes'
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${currentTab === 'mensajes'
               ? 'text-[#3525cd] font-bold'
               : 'text-[#464555] hover:text-[#131b2e]'
-          }`}
+            }`}
         >
+          {currentTab === 'mensajes' && (
+            <span className="absolute top-0 w-6 h-1 rounded-full bg-[#3525cd] animate-in fade-in" />
+          )}
           <span
             className="material-symbols-outlined text-[24px]"
             style={{
@@ -116,16 +124,17 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => onNavigate('perfil')}
           aria-current={currentTab === 'perfil' ? 'page' : undefined}
-          className={`flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${
-            currentTab === 'perfil'
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-colors ${currentTab === 'perfil'
               ? 'text-[#3525cd] font-bold'
               : 'text-[#464555] hover:text-[#131b2e]'
-          }`}
-        >
-          <div
-            className={`w-6 h-6 rounded-full overflow-hidden ring-1 ${
-              currentTab === 'perfil' ? 'ring-[#3525cd] ring-2' : 'ring-[#c7c4d8]'
             }`}
+        >
+          {currentTab === 'perfil' && (
+            <span className="absolute top-0 w-6 h-1 rounded-full bg-[#3525cd] animate-in fade-in" />
+          )}
+          <div
+            className={`w-6 h-6 rounded-full overflow-hidden ring-1 ${currentTab === 'perfil' ? 'ring-[#3525cd] ring-2' : 'ring-[#c7c4d8]'
+              }`}
           >
             {userAvatar ? (
               <img

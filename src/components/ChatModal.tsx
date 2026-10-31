@@ -144,27 +144,30 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             </span>
           </div>
 
-          {chat.messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex flex-col ${
-                msg.isSender ? 'items-end' : 'items-start'
-              }`}
-            >
+          {chat.messages.map((msg) => {
+            const isMe = msg.sender === 'me';
+            return (
               <div
-                className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs shadow-xs leading-relaxed ${
-                  msg.isSender
-                    ? 'bg-[#3525cd] text-white rounded-br-xs'
-                    : 'bg-white text-[#131b2e] rounded-bl-xs border border-[#eaedff]'
+                key={msg.id}
+                className={`flex flex-col ${
+                  isMe ? 'items-end' : 'items-start'
                 }`}
               >
-                {msg.text}
+                <div
+                  className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs shadow-xs leading-relaxed ${
+                    isMe
+                      ? 'bg-[#3525cd] text-white rounded-br-xs'
+                      : 'bg-white text-[#131b2e] rounded-bl-xs border border-[#eaedff]'
+                  }`}
+                >
+                  {msg.text}
+                </div>
+                <span className="text-[9px] text-[#777587] mt-0.5 px-1">
+                  {msg.time} {isMe && '✓✓'}
+                </span>
               </div>
-              <span className="text-[9px] text-[#777587] mt-0.5 px-1">
-                {msg.time} {msg.isSender && '✓✓'}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Quick reply chips */}

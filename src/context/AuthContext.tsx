@@ -1,7 +1,7 @@
 /**
  * src/context/AuthContext.tsx
  * Proveedor de Contexto Global de Autenticación, Sesiones y Perfiles.
- * Maneja el ciclo de vida del usuario registrado, autenticación por contraseña y perfiles.
+ * Maneja el ciclo de vida del usuario registrado, autenticación con Google y perfiles.
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -55,6 +55,8 @@ export interface AuthContextType {
   // Acciones de autenticación
   loginWithEmail: (email: string, password: string, rememberMe?: boolean) => Promise<any>;
   register: (formData: any) => Promise<any>;
+  loginWithGoogle: () => Promise<any>;
+  signInWithGoogle: () => Promise<any>;
   loginAsGuest: () => Promise<any>;
   logout: () => Promise<void>;
   // Gestión de perfil
@@ -105,6 +107,7 @@ const createCampusUserFromSupabase = (sbUser: any): { user: User; profile: UserP
     email: email,
     role: 'student',
     is_verified: true,
+    profile_completed: true,
   };
 
   return { user: userObj, profile: profileObj };
@@ -286,6 +289,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
+   * Autenticación con Google OAuth vía Supabase
+   */
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      return await supabaseSignInWithGoogle();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    return loginWithGoogle();
+  };
+
+  /**
    * Acceso en Modo Invitado
    */
   const loginAsGuest = async () => {
@@ -389,6 +408,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         closeUpgradeModal,
         loginWithEmail,
         register,
+        loginWithGoogle,
+        signInWithGoogle,
         loginAsGuest,
         logout,
         updateProfile,

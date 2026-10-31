@@ -10,12 +10,11 @@ interface LoginScreenProps {
 type ScreenStep = 'login' | 'register' | 'profile';
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initialMode = 'login' }) => {
-  const { user, profile, isAuthenticated, isGuest, isLoading, loginWithEmail, register, updateProfile } = useAuth();
+  const { user, profile, isAuthenticated, isGuest, isLoading, loginWithEmail, updateProfile, loginWithGoogle } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [step, setStep] = useState<ScreenStep>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [username, setUsername] = useState(profile?.username || '');
   const [bio, setBio] = useState(profile?.bio || '');
@@ -59,41 +58,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
   const handleLogin = (event: React.FormEvent) => {
     event.preventDefault();
     void runAuthAction(() => loginWithEmail(email.trim(), password));
-  };
-
-  const handleRegister = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!fullName.trim()) {
-      setErrorMessage('Escribe tu nombre para crear la cuenta.');
-      return;
-    }
-    if (password.length < 8 || !/[a-z]/i.test(password) || !/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/.test(password)) {
-      setErrorMessage('Usa al menos 8 caracteres, con una letra y un número o símbolo.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setErrorMessage('Las contraseñas no coinciden.');
-      return;
-    }
-
-    void runAuthAction(async () => {
-      const emailPrefix = email.trim().split('@')[0]?.replace(/[^a-zA-Z0-9._-]/g, '') || 'usuario';
-      const result = await register({
-        email: email.trim(),
-        password,
-        full_name: fullName.trim(),
-        username: emailPrefix,
-        university: '',
-        faculty: '',
-        career: '',
-        semester: '',
-      });
-      if (!result?.success) throw new Error(result?.message || 'No se pudo crear la cuenta.');
-
-      // Transición inmediata al panel de datos personales del perfil
-      setUsername(emailPrefix);
-      setStep('profile');
-    });
   };
 
   const handleSaveProfile = (event: React.FormEvent) => {
@@ -174,7 +138,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
             {step === 'profile'
               ? 'Cuéntale a la comunidad quién eres. Podrás cambiar estos datos después.'
               : step === 'register'
-                ? 'Regístrate con tu correo, tu nombre y una contraseña segura.'
+                ? 'Crea tu cuenta institucional accediendo mediante Google.'
                 : 'Inicia sesión con tu correo y contraseña para entrar a tu cuenta.'}
           </p>
         </header>
@@ -204,32 +168,85 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
               {isLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
               Entrar a mi cuenta
             </button>
+
+            <div className="relative flex items-center justify-center my-3">
+              <div className="w-full bg-[#e2e7ff] h-[1px]" />
+              <span className="absolute bg-[#faf8ff] px-3 text-[10px] font-bold text-[#777587] uppercase tracking-wider">
+                o continúa con
+              </span>
+            </div>
+
+            <button
+              onClick={() => runAuthAction(() => loginWithGoogle())}
+              disabled={isLoading}
+              type="button"
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-[#e2e7ff] bg-white px-4 text-sm font-bold text-[#17152b] shadow-sm transition hover:bg-[#f7f6ff] hover:border-[#3525cd]/40 active:scale-[0.99] disabled:opacity-60"
+            >
+              <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24">
+                <path
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17Z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24Z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.28 14.27A7.17 7.17 0 0 1 4.9 12c0-.79.14-1.57.38-2.27V6.58H1.25A11.96 11.96 0 0 0 0 12c0 1.92.45 3.74 1.25 5.42l4.03-3.15Z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z"
+                  fill="#EA4335"
+                />
+              </svg>
+              <span>{isLoading ? 'Conectando...' : 'Iniciar sesión con Google'}</span>
+            </button>
           </form>
         )}
 
+        {/* APARTADO DE CREA TU CUENTA: SOLO INICIAR SESIÓN MEDIANTE GOOGLE */}
         {step === 'register' && (
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div>
-              <label className={labelClass} htmlFor="register-name">Tu nombre</label>
-              <input id="register-name" className={`${inputClass} login-input`} autoComplete="name" placeholder="Nombre y apellido" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+          <div className="space-y-4 py-2">
+            <div className="rounded-2xl border border-[#e2e7ff] bg-white p-5 text-center shadow-xs">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f2f0fa] text-[#3525cd]">
+                <span className="material-symbols-outlined text-[26px]">school</span>
+              </div>
+              <h3 className="text-base font-bold text-[#17152b]">
+                Registro con Cuenta Universitaria
+              </h3>
+              <p className="mt-1.5 text-xs leading-5 text-[#747184]">
+                Para crear tu cuenta en CampusLink, inicia sesión directamente mediante tu cuenta institucional de Google.
+              </p>
             </div>
-            <div>
-              <label className={labelClass} htmlFor="register-email">Correo electrónico</label>
-              <input id="register-email" className={`${inputClass} login-input`} type="email" autoComplete="email" placeholder="tu@correo.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
-            </div>
-            <div>
-              <label className={labelClass} htmlFor="register-password">Crea una contraseña</label>
-              <input id="register-password" className={`${inputClass} login-input`} type="password" autoComplete="new-password" minLength={8} placeholder="8+ caracteres, incluye letra y número" value={password} onChange={(event) => setPassword(event.target.value)} required />
-            </div>
-            <div>
-              <label className={labelClass} htmlFor="register-confirm-password">Confirma tu contraseña</label>
-              <input id="register-confirm-password" className={`${inputClass} login-input`} type="password" autoComplete="new-password" minLength={8} placeholder="Escríbela otra vez" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
-            </div>
-            <button disabled={isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-sm font-bold text-white shadow-md shadow-indigo-500/20 transition hover:brightness-105 disabled:opacity-60" type="submit">
-              {isLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-              Crear mi cuenta
+
+            <button
+              onClick={() => runAuthAction(() => loginWithGoogle())}
+              disabled={isLoading}
+              type="button"
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-[#e2e7ff] bg-white px-4 text-sm font-bold text-[#17152b] shadow-sm transition hover:bg-[#f7f6ff] hover:border-[#3525cd]/40 active:scale-[0.99] disabled:opacity-60"
+            >
+              <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24">
+                <path
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17Z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24Z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.28 14.27A7.17 7.17 0 0 1 4.9 12c0-.79.14-1.57.38-2.27V6.58H1.25A11.96 11.96 0 0 0 0 12c0 1.92.45 3.74 1.25 5.42l4.03-3.15Z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z"
+                  fill="#EA4335"
+                />
+              </svg>
+              <span>{isLoading ? 'Conectando...' : 'Iniciar sesión con Google'}</span>
             </button>
-          </form>
+          </div>
         )}
 
         {step === 'profile' && !isGuest && (
@@ -274,7 +291,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initia
         )}
 
         {errorMessage && <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</p>}
-        <p className="mt-6 text-center text-xs leading-5 text-[#858294]">Tu cuenta se protege con contraseña. No compartas tus credenciales con nadie.</p>
+        <p className="mt-6 text-center text-xs leading-5 text-[#858294]">Tu cuenta se protege con seguridad institucional. Acceso rápido y verificado.</p>
         </div>
       </section>
     </main>

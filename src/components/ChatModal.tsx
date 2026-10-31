@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { ChatThread } from '../types';
-import { CURRENT_USER } from '../data/mockData';
 
 interface ChatModalProps {
   chat: ChatThread | null;

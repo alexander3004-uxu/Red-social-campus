@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Post, Story } from '../types';
-import { CURRENT_USER } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
 
 interface FeedScreenProps {
   posts: Post[];
@@ -12,6 +12,7 @@ interface FeedScreenProps {
   onOpenStory: (story: Story) => void;
   stories: Story[];
   onOpenCreatePost: (type?: 'text' | 'pdf' | 'poll' | 'photo') => void;
+  onOpenSearch: () => void;
 }
 
 export const FeedScreen: React.FC<FeedScreenProps> = ({
@@ -24,7 +25,9 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
   onOpenStory,
   stories,
   onOpenCreatePost,
+  onOpenSearch,
 }) => {
+  const { profile } = useAuth();
   const [activeCategory, setActiveCategory] = useState<'para-ti' | 'carrera' | 'eventos' | 'oficial'>('para-ti');
   const [commentOpenPostId, setCommentOpenPostId] = useState<string | null>(null);
   const [newCommentText, setNewCommentText] = useState('');
@@ -92,7 +95,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
                 : 'bg-[#e2e7ff] text-[#464555] hover:bg-[#dae2fd]'
             }`}
           >
-            Para ti
+            Amigos
           </button>
           <button
             onClick={() => setActiveCategory('carrera')}
@@ -138,11 +141,17 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
         <div className="bg-white rounded-2xl p-4 shadow-[0_4px_16px_-2px_rgba(15,23,42,0.04)] border border-[#eaedff] flex flex-col gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-[#eaedff]">
-              <img
-                alt={CURRENT_USER.name}
-                className="w-full h-full object-cover"
-                src={CURRENT_USER.avatar}
-              />
+              {profile?.avatar_url ? (
+                <img
+                  alt={profile?.full_name || 'Tú'}
+                  className="w-full h-full object-cover"
+                  src={profile.avatar_url}
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-tr from-[#3525cd] to-[#712ae2] flex items-center justify-center text-white text-sm font-bold">
+                  {(profile?.full_name || 'U')[0].toUpperCase()}
+                </div>
+              )}
             </div>
             <button
               onClick={() => onOpenCreatePost('text')}
@@ -201,11 +210,13 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="relative w-11 h-11 rounded-full overflow-hidden shrink-0 bg-[#eaedff]">
-                  <img
-                    alt={post.authorName}
-                    className="w-full h-full object-cover"
-                    src={post.authorAvatar}
-                  />
+                  {post.authorAvatar ? (
+                    <img alt={post.authorName} className="h-full w-full object-cover" src={post.authorAvatar} />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-sm font-bold text-[#5946c7]">
+                      {post.authorName.slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col min-w-0">
                   <div className="flex items-center gap-1.5">
@@ -546,6 +557,23 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
             )}
           </article>
         ))}
+        {filteredPosts.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-[#d9d4ea] bg-white px-6 py-10 text-center shadow-sm">
+            <span className="material-symbols-outlined text-4xl text-[#7058d6]">diversity_3</span>
+            <h2 className="mt-3 text-base font-bold text-[#211f32]">Tu comunidad empieza aquí</h2>
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#777487]">
+              Aquí aparecen tus publicaciones y las de las personas que agregues a tu red. Busca compañeros para ver sus novedades.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <button onClick={onOpenSearch} type="button" className="rounded-xl bg-[#5946c7] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#4433ad]">
+                Buscar amigos
+              </button>
+              <button onClick={() => onOpenCreatePost('text')} type="button" className="rounded-xl border border-[#ded9ef] bg-white px-5 py-2.5 text-sm font-bold text-[#5946c7] transition hover:bg-[#f8f7fb]">
+                Crear publicación
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Floating Action Button (FAB) - Visible on mobile/tablet, desktop has sidebar action */}

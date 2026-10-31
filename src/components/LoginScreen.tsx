@@ -1,665 +1,283 @@
-/**
- * src/components/LoginScreen.tsx
- * Pantalla integral de Autenticación Universitaria:
- * - Pestañas fluidas: Iniciar Sesión vs. Registrarse
- * - Validación y sanitización estricta de credenciales
- * - Medidor de fortaleza de contraseñas en tiempo real
- * - Botón oficial de Google Sign-In (Google OAuth 2.0 / GIS)
- * - Botón de acceso directo en Modo Invitado (Solo Lectura)
- * - Feedback visual inmediato (errores HTTP 400, 401, 409 y alertas de éxito)
- */
-
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../supabaseClient';
 
 interface LoginScreenProps {
-  onLoginSuccess: () => void;
-  selectedCampus: string;
-  onSelectCampus: (campus: string) => void;
+  onLoginSuccess: (university?: string) => void;
   initialMode?: 'login' | 'register';
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({
-  onLoginSuccess,
-  selectedCampus,
-  onSelectCampus,
-  initialMode = 'login',
-}) => {
-  const { loginWithEmail, register, loginWithGoogle, loginAsGuest } = useAuth();
+type ScreenStep = 'login' | 'register' | 'profile';
+
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, initialMode = 'login' }) => {
+  const { user, profile, isAuthenticated, isGuest, isLoading, loginWithEmail, register, updateProfile } = useAuth();
   const { isDark, toggleTheme } = useTheme();
-
-  // Modo actual: 'login' o 'register'
-  const [authMode, setAuthMode] = useState<'login' | 'register'>(initialMode);
-
-  // Estados de Formulario de Login
-  const [loginEmail, setLoginEmail] = useState('sofia.valenzuela@ucentral.edu');
-  const [loginPassword, setLoginPassword] = useState('campus2026!');
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
-
-  // Estados de Formulario de Registro
-  const [regFullName, setRegFullName] = useState('');
-  const [regUsername, setRegUsername] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regCareer, setRegCareer] = useState('Ingeniería de Software');
-  const [regFaculty, setRegFaculty] = useState('Facultad de Ingeniería');
-  const [regSemester, setRegSemester] = useState('1er Semestre');
-
-  // Estados de UI & Feedback
-  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<ScreenStep>(initialMode);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState(profile?.full_name || '');
+  const [username, setUsername] = useState(profile?.username || '');
+  const [bio, setBio] = useState(profile?.bio || '');
+  const [university, setUniversity] = useState(profile?.university || '');
+  const [faculty, setFaculty] = useState(profile?.faculty || '');
+  const [career, setCareer] = useState(profile?.career || '');
+  const [semester, setSemester] = useState(profile?.semester || '');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [showCampusDropdown, setShowCampusDropdown] = useState(false);
-  const [isBiometricScanning, setIsBiometricScanning] = useState(false);
-  const [biometricSuccess, setBiometricSuccess] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (isGuest) return;
+    if (profile?.profile_completed && profile?.university && profile?.career) {
+      onLoginSuccess(profile.university);
+      return;
+    }
+    const currentFullName = profile?.full_name || fullName || '';
+    const suggestedUsername = (profile?.username && !profile.username.startsWith('campus_'))
+      ? profile.username
+      : (email ? email.split('@')[0] : (user?.email?.split('@')[0] || ''));
 
-  // Validación de dominio educativo
-  const isEduEmail = (val: string) => {
-    const lower = val.toLowerCase();
-    return lower.includes('.edu') || lower.includes('.ac.') || lower.includes('.edu.');
-  };
+    setFullName(currentFullName);
+    if (suggestedUsername) setUsername(suggestedUsername);
+    if (profile?.university) setUniversity(profile.university);
+    if (profile?.faculty) setFaculty(profile.faculty);
+    if (profile?.career) setCareer(profile.career);
+    if (profile?.semester) setSemester(profile.semester);
+    if (profile?.bio) setBio(profile.bio);
+    setStep('profile');
+  }, [isAuthenticated, isGuest, profile?.profile_completed, profile?.university, profile?.career, user?.email]);
 
-  // Cálculo de fortaleza de contraseña para registro
-  const getPasswordStrength = (pass: string) => {
-    if (!pass) return { score: 0, label: 'Vacía', color: 'bg-gray-200' };
-    let score = 0;
-    if (pass.length >= 8) score++;
-    if (/[A-Z]/.test(pass)) score++;
-    if (/[0-9]/.test(pass)) score++;
-    if (/[^A-Za-z0-9]/.test(pass)) score++;
-
-    if (score <= 1) return { score: 1, label: 'Débil', color: 'bg-red-500', width: 'w-1/4' };
-    if (score === 2 || score === 3) return { score: 2, label: 'Media', color: 'bg-amber-500', width: 'w-2/4' };
-    return { score: 3, label: 'Segura', color: 'bg-emerald-500', width: 'w-full' };
-  };
-
-  const passwordStrength = getPasswordStrength(regPassword);
-
-  /**
-   * Envío del formulario de Login
-   */
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const runAuthAction = async (action: () => Promise<unknown>) => {
     setErrorMessage(null);
-    setValidationErrors([]);
-    setIsLoading(true);
-
     try {
-      await loginWithEmail(loginEmail, loginPassword, rememberMe);
-      triggerToast('¡Bienvenido(a) de vuelta al Campus!');
-      setTimeout(() => onLoginSuccess(), 400);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Error al iniciar sesión. Revisa tus credenciales.');
-      if (err.errors) setValidationErrors(err.errors);
-    } finally {
-      setIsLoading(false);
+      await action();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Ocurrió un error. Inténtalo de nuevo.');
     }
   };
 
-  /**
-   * Formulario de Registro (Interfaz visual / No funcional)
-   */
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = (event: React.FormEvent) => {
+    event.preventDefault();
+    void runAuthAction(() => loginWithEmail(email.trim(), password));
   };
 
-  /**
-   * Acceso con Google OAuth 2.0 (Supabase)
-   */
-  const handleGoogleLogin = async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
+  const handleRegister = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!fullName.trim()) {
+      setErrorMessage('Escribe tu nombre para crear la cuenta.');
+      return;
+    }
+    if (password.length < 8 || !/[a-z]/i.test(password) || !/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/.test(password)) {
+      setErrorMessage('Usa al menos 8 caracteres, con una letra y un número o símbolo.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMessage('Las contraseñas no coinciden.');
+      return;
+    }
+
+    void runAuthAction(async () => {
+      const emailPrefix = email.trim().split('@')[0]?.replace(/[^a-zA-Z0-9._-]/g, '') || 'usuario';
+      const result = await register({
+        email: email.trim(),
+        password,
+        full_name: fullName.trim(),
+        username: emailPrefix,
+        university: '',
+        faculty: '',
+        career: '',
+        semester: '',
+      });
+      if (!result?.success) throw new Error(result?.message || 'No se pudo crear la cuenta.');
+
+      // Transición inmediata al panel de datos personales del perfil
+      setUsername(emailPrefix);
+      setStep('profile');
     });
-
-    if (error) {
-      console.error("Error al iniciar sesión con Google:", error.message);
-      setErrorMessage(error.message || 'Error al iniciar sesión con Google.');
-      setIsLoading(false);
-    }
   };
 
-  /**
-   * Acceso en Modo Invitado (Lectura)
-   */
-  const handleGuestAccess = async () => {
-    setIsLoading(true);
+  const handleSaveProfile = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!fullName.trim() || !username.trim() || !university.trim() || !career.trim()) {
+      setErrorMessage('Completa tu nombre, usuario, universidad y carrera para continuar.');
+      return;
+    }
+
+    void runAuthAction(async () => {
+      await updateProfile({
+        full_name: fullName.trim(),
+        username: username.trim().replace(/^@/, ''),
+        bio: bio.trim(),
+        university: university.trim(),
+        faculty: faculty.trim(),
+        career: career.trim(),
+        semester: semester.trim(),
+        profile_completed: true,
+      });
+      onLoginSuccess(university.trim());
+    });
+  };
+
+  const switchStep = (nextStep: ScreenStep) => {
     setErrorMessage(null);
-    try {
-      await loginAsGuest();
-      triggerToast('Navegando como Invitado del Campus (Solo Lectura)');
-      setTimeout(() => onLoginSuccess(), 400);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Error al iniciar sesión como invitado.');
-    } finally {
-      setIsLoading(false);
-    }
+    setStep(nextStep);
   };
 
-  /**
-   * Simulación Biométrica / NFC
-   */
-  const handleBiometric = () => {
-    setIsBiometricScanning(true);
-    triggerToast('Escaneando credencial NFC...');
-    setTimeout(async () => {
-      setIsBiometricScanning(false);
-      setBiometricSuccess(true);
-      triggerToast('¡Credencial NFC verificada!');
-      try {
-        await loginWithEmail('sofia.valenzuela@ucentral.edu', 'campus2026!', true);
-        setTimeout(() => onLoginSuccess(), 500);
-      } catch {
-        onLoginSuccess();
-      }
-    }, 1000);
-  };
+  const inputClass = 'h-12 w-full rounded-xl border border-[#e7e4f0] bg-white px-4 text-sm text-[#211f32] outline-none transition placeholder:text-[#a09caf] focus:border-[#7058d6] focus:ring-4 focus:ring-[#7058d6]/10';
+  const labelClass = 'mb-1.5 block text-xs font-semibold text-[#48465a]';
 
   return (
-    <div className="min-h-screen bg-[#faf8ff] flex flex-col justify-center items-center px-4 py-8 relative">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#131b2e] text-white px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-bounce">
-          <span className="material-symbols-outlined text-[18px] text-[#67f4b7]">verified</span>
-          <span>{toastMessage}</span>
-        </div>
-      )}
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f7f6ff] px-4 py-10 text-[#17152b]">
+      <div className="pointer-events-none absolute -left-24 -top-28 h-80 w-80 rounded-full bg-violet-200/50 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -right-20 h-96 w-96 rounded-full bg-indigo-200/50 blur-3xl" />
+      <button
+        onClick={toggleTheme}
+        type="button"
+        aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        className="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/80 text-[#5144bb] shadow-sm transition hover:bg-white"
+      >
+        <span className="material-symbols-outlined text-[20px]">{isDark ? 'light_mode' : 'dark_mode'}</span>
+      </button>
 
-      {/* Floating Theme Switcher */}
-      <div className="absolute top-4 right-4 z-20">
-        <button
-          onClick={toggleTheme}
-          type="button"
-          aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-          title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-          className="w-10 h-10 rounded-full bg-white shadow-sm border border-[#eaedff] flex items-center justify-center text-[#464555] hover:bg-[#eaedff] transition-all active:scale-95"
-        >
-          <span className={`material-symbols-outlined text-[20px] ${isDark ? 'text-amber-400' : 'text-[#3525cd]'}`}>
-            {isDark ? 'light_mode' : 'dark_mode'}
-          </span>
-        </button>
-      </div>
-
-
-      <div className="w-full max-w-md flex flex-col space-y-4">
-        {/* Brand Header */}
-        <div className="flex flex-col items-center text-center pt-2">
-          <div className="relative w-20 h-20 mb-2 flex items-center justify-center">
-            <div className="absolute inset-0 bg-[#4f46e5]/15 rounded-full blur-xl transform scale-110 animate-pulse" />
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#3525cd] via-[#4f46e5] to-[#712ae2] flex items-center justify-center relative z-10 shadow-lg shadow-[#3525cd]/25 border border-white/20">
-              <span className="material-symbols-outlined text-white text-3xl">school</span>
+      <section className="login-shell relative grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/80 shadow-[0_24px_80px_-32px_rgba(53,37,205,0.35)] lg:grid-cols-[0.9fr_1.1fr]">
+        <aside className="hidden min-h-[680px] flex-col justify-between bg-gradient-to-br from-[#251a79] via-[#4935c8] to-[#8d59e9] p-10 text-white lg:flex">
+          <div>
+            <div className="mb-16 flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
+                <span className="material-symbols-outlined text-[24px]">school</span>
+              </span>
+              <span className="text-lg font-extrabold tracking-tight">CampusLink</span>
             </div>
+            <p className="mb-4 text-xs font-bold uppercase tracking-[0.24em] text-violet-200">Una comunidad hecha para ti</p>
+            <h2 className="max-w-md text-4xl font-extrabold leading-[1.12] tracking-tight">Tu vida universitaria, más conectada.</h2>
+            <p className="mt-5 max-w-sm text-sm leading-7 text-violet-100/90">
+              Comparte ideas, encuentra compañeros de carrera y crea vínculos en tu campus.
+            </p>
           </div>
-          <h1 className="text-[26px] font-bold text-[#131b2e] tracking-tight">
-            Red Social{' '}
-            <span className="bg-gradient-to-r from-[#3525cd] to-[#712ae2] bg-clip-text text-transparent">
-              CampusLink
-            </span>
+          <div className="space-y-3 text-sm font-semibold text-white/95">
+            <p className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px]">forum</span> Conversaciones que sí importan</p>
+            <p className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px]">groups</span> Personas de tu comunidad</p>
+            <p className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px]">auto_awesome</span> Un espacio para crecer juntos</p>
+          </div>
+          <p className="text-xs text-violet-200">CampusLink · Tu campus, tu comunidad</p>
+        </aside>
+        <div className="login-panel p-6 sm:p-10 lg:p-12">
+        <header className="mb-7 flex flex-col items-center text-center">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-gradient-to-br from-[#3525cd] to-[#8054e9] text-white shadow-lg shadow-indigo-500/25">
+            <span className="material-symbols-outlined text-[28px]">school</span>
+          </div>
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#6458c9]">Tu comunidad universitaria</p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {step === 'profile' ? 'Completa tu perfil' : step === 'register' ? 'Crea tu cuenta' : 'Bienvenido a CampusLink'}
           </h1>
-          <p className="text-xs text-[#464555] max-w-xs mt-1">
-            Comunidad universitaria conectada: apunte digital, salas de estudio y marketplace seguro.
+          <p className="mt-2 max-w-sm text-sm leading-6 text-[#747184]">
+            {step === 'profile'
+              ? 'Cuéntale a la comunidad quién eres. Podrás cambiar estos datos después.'
+              : step === 'register'
+                ? 'Regístrate con tu correo, tu nombre y una contraseña segura.'
+                : 'Inicia sesión con tu correo y contraseña para entrar a tu cuenta.'}
           </p>
-        </div>
+        </header>
 
-        {/* Selector de Universidad / Campus */}
-        <div className="relative">
-          <button
-            onClick={() => setShowCampusDropdown(!showCampusDropdown)}
-            className="w-full bg-[#f2f3ff] hover:bg-[#eaedff] transition-all rounded-xl px-4 py-2.5 flex items-center justify-between border border-[#e2e7ff] text-left"
-            type="button"
-          >
-            <div className="flex items-center space-x-2.5">
-              <div className="w-7 h-7 rounded-lg bg-[#3525cd]/10 flex items-center justify-center text-[#3525cd]">
-                <span className="material-symbols-outlined text-base">school</span>
+        {(step !== 'profile' || isGuest) && (
+          <div className="mb-6 grid grid-cols-2 rounded-xl bg-[#f2f0fa] p-1">
+            <button onClick={() => switchStep('login')} type="button" className={`rounded-lg py-2.5 text-sm font-semibold transition ${step === 'login' ? 'bg-white text-[#392ab8] shadow-sm' : 'text-[#777487]'}`}>
+              Iniciar sesión
+            </button>
+            <button onClick={() => switchStep('register')} type="button" className={`rounded-lg py-2.5 text-sm font-semibold transition ${step === 'register' ? 'bg-white text-[#392ab8] shadow-sm' : 'text-[#777487]'}`}>
+              Crear cuenta
+            </button>
+          </div>
+        )}
+
+        {step === 'login' && (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className={labelClass} htmlFor="login-email">Correo electrónico</label>
+              <input id="login-email" className={`${inputClass} login-input`} type="email" autoComplete="email" placeholder="tu@correo.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="login-password">Contraseña</label>
+              <input id="login-password" className={`${inputClass} login-input`} type="password" autoComplete="current-password" placeholder="Tu contraseña" value={password} onChange={(event) => setPassword(event.target.value)} required />
+            </div>
+            <button disabled={isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-sm font-bold text-white shadow-md shadow-indigo-500/20 transition hover:brightness-105 disabled:opacity-60" type="submit">
+              {isLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+              Entrar a mi cuenta
+            </button>
+          </form>
+        )}
+
+        {step === 'register' && (
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div>
+              <label className={labelClass} htmlFor="register-name">Tu nombre</label>
+              <input id="register-name" className={`${inputClass} login-input`} autoComplete="name" placeholder="Nombre y apellido" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="register-email">Correo electrónico</label>
+              <input id="register-email" className={`${inputClass} login-input`} type="email" autoComplete="email" placeholder="tu@correo.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="register-password">Crea una contraseña</label>
+              <input id="register-password" className={`${inputClass} login-input`} type="password" autoComplete="new-password" minLength={8} placeholder="8+ caracteres, incluye letra y número" value={password} onChange={(event) => setPassword(event.target.value)} required />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="register-confirm-password">Confirma tu contraseña</label>
+              <input id="register-confirm-password" className={`${inputClass} login-input`} type="password" autoComplete="new-password" minLength={8} placeholder="Escríbela otra vez" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
+            </div>
+            <button disabled={isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-sm font-bold text-white shadow-md shadow-indigo-500/20 transition hover:brightness-105 disabled:opacity-60" type="submit">
+              {isLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+              Crear mi cuenta
+            </button>
+          </form>
+        )}
+
+        {step === 'profile' && !isGuest && (
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClass} htmlFor="profile-name">Nombre completo</label>
+                <input id="profile-name" className={`${inputClass} login-input`} autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
               </div>
               <div>
-                <span className="block text-[9px] text-[#3525cd] uppercase font-bold tracking-wider">
-                  Universidad Vinculada
-                </span>
-                <span className="text-xs text-[#131b2e] font-semibold truncate block max-w-[260px]">
-                  {selectedCampus}
-                </span>
+                <label className={labelClass} htmlFor="profile-username">Nombre de usuario</label>
+                <input id="profile-username" className={`${inputClass} login-input`} autoComplete="username" placeholder="ej. ana.lopez" value={username} onChange={(event) => setUsername(event.target.value)} required />
               </div>
             </div>
-            <span
-              className={`material-symbols-outlined text-[#464555] text-sm transition-transform ${
-                showCampusDropdown ? 'rotate-180' : ''
-              }`}
-            >
-              expand_more
-            </span>
-          </button>
-
-          {showCampusDropdown && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl z-30 p-1 space-y-1 border border-[#eaedff]">
-              {[
-                'Universidad Central (Sede Principal)',
-                'Tecnológico Metropolitano',
-                'Facultad de Medicina & Ciencias',
-                'Universidad Nacional Autónoma',
-                'Pontificia Universidad Católica',
-              ].map((c) => (
-                <button
-                  key={c}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between hover:bg-[#e2e7ff] ${
-                    selectedCampus === c ? 'text-[#3525cd] font-bold bg-[#f2f3ff]' : 'text-[#131b2e]'
-                  }`}
-                  onClick={() => {
-                    onSelectCampus(c);
-                    setShowCampusDropdown(false);
-                  }}
-                  type="button"
-                >
-                  <span>{c}</span>
-                  {selectedCampus === c && (
-                    <span className="material-symbols-outlined text-sm text-[#3525cd]">check</span>
-                  )}
-                </button>
-              ))}
+            <div>
+              <label className={labelClass} htmlFor="profile-university">Universidad</label>
+              <input id="profile-university" className={`${inputClass} login-input`} placeholder="¿Dónde estudias?" value={university} onChange={(event) => setUniversity(event.target.value)} required />
             </div>
-          )}
-        </div>
-
-        {/* Tab Selector: Iniciar Sesión vs. Registrarse */}
-        <div className="flex p-1 bg-[#f2f3ff] rounded-2xl border border-[#e2e7ff]">
-          <button
-            type="button"
-            onClick={() => {
-              setAuthMode('login');
-              setErrorMessage(null);
-            }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-              authMode === 'login'
-                ? 'bg-white text-[#3525cd] shadow-xs'
-                : 'text-[#464555] hover:text-[#131b2e]'
-            }`}
-          >
-            Iniciar Sesión
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setAuthMode('register');
-              setErrorMessage(null);
-            }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-              authMode === 'register'
-                ? 'bg-white text-[#3525cd] shadow-xs'
-                : 'text-[#464555] hover:text-[#131b2e]'
-            }`}
-          >
-            Crear Cuenta
-          </button>
-        </div>
-
-        {/* Banner de Errores de la API */}
-        {errorMessage && (
-          <div className="p-3 rounded-xl bg-[#ffdad6] text-[#410002] text-xs font-medium space-y-1 border border-[#ffb4ab]">
-            <div className="flex items-center gap-2 font-bold">
-              <span className="material-symbols-outlined text-base text-[#ba1a1a]">error</span>
-              <span>{errorMessage}</span>
-            </div>
-            {validationErrors.length > 0 && (
-              <ul className="list-disc list-inside text-[11px] pl-2 text-[#410002]/90 space-y-0.5">
-                {validationErrors.map((err, i) => (
-                  <li key={i}>{err}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* FORMULARIO DE INICIO DE SESIÓN */}
-        {authMode === 'login' && (
-          <form
-            onSubmit={handleLoginSubmit}
-            className="bg-white rounded-2xl p-5 shadow-xs space-y-3.5 border border-[#eaedff]"
-          >
-            {/* Email Field */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-[#131b2e]" htmlFor="login-email">
-                  Correo institucional o personal
-                </label>
-                {isEduEmail(loginEmail) && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#6ffbbe]/30 text-[#005338] font-bold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-[11px]">verified</span>
-                    .edu verificado
-                  </span>
-                )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClass} htmlFor="profile-faculty">Facultad</label>
+                <input id="profile-faculty" className={`${inputClass} login-input`} placeholder="Facultad (opcional)" value={faculty} onChange={(event) => setFaculty(event.target.value)} />
               </div>
-              <div className="relative flex items-center">
-                <span className="material-symbols-outlined absolute left-3 text-[#464555] text-lg">
-                  alternate_email
-                </span>
-                <input
-                  id="login-email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full h-11 pl-10 pr-3 rounded-xl bg-[#f2f3ff] text-xs text-[#131b2e] focus:bg-white focus:ring-2 focus:ring-[#3525cd]/20 border border-transparent focus:border-[#3525cd]/40 outline-none transition-all"
-                  placeholder="ej. sofia.valenzuela@ucentral.edu"
-                  type="email"
-                  required
-                />
+              <div>
+                <label className={labelClass} htmlFor="profile-career">Carrera</label>
+                <input id="profile-career" className={`${inputClass} login-input`} placeholder="Tu carrera" value={career} onChange={(event) => setCareer(event.target.value)} required />
               </div>
             </div>
-
-            {/* Password Field */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-[#131b2e]" htmlFor="login-password">
-                  Contraseña
-                </label>
-                <button
-                  type="button"
-                  onClick={() => triggerToast('Se envió un correo de recuperación a tu bandeja institucional.')}
-                  className="text-[10px] font-bold text-[#3525cd] hover:underline"
-                >
-                  ¿Olvidaste tu contraseña?
-                </button>
-              </div>
-              <div className="relative flex items-center">
-                <span className="material-symbols-outlined absolute left-3 text-[#464555] text-lg">
-                  lock
-                </span>
-                <input
-                  id="login-password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full h-11 pl-10 pr-10 rounded-xl bg-[#f2f3ff] text-xs text-[#131b2e] focus:bg-white focus:ring-2 focus:ring-[#3525cd]/20 border border-transparent focus:border-[#3525cd]/40 outline-none transition-all"
-                  placeholder="Ingresa tu clave de acceso"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 text-[#464555] hover:text-[#131b2e] p-1"
-                  aria-label="Mostrar u ocultar contraseña"
-                >
-                  <span className="material-symbols-outlined text-lg">
-                    {showPassword ? 'visibility_off' : 'visibility'}
-                  </span>
-                </button>
-              </div>
+            <div>
+              <label className={labelClass} htmlFor="profile-semester">Semestre</label>
+              <input id="profile-semester" className={`${inputClass} login-input`} placeholder="Ej. 3er semestre (opcional)" value={semester} onChange={(event) => setSemester(event.target.value)} />
             </div>
-
-            {/* Recordar Sesión */}
-            <div className="flex items-center justify-between pt-0.5">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded text-[#3525cd] accent-[#3525cd] cursor-pointer"
-                />
-                <span className="text-[11px] text-[#464555]">Recordar en este equipo (Cookie segura)</span>
-              </label>
+            <div>
+              <label className={labelClass} htmlFor="profile-bio">Sobre ti</label>
+              <textarea id="profile-bio" className={`${inputClass} login-input h-24 resize-y py-3`} placeholder="Una breve descripción (opcional)" value={bio} onChange={(event) => setBio(event.target.value)} />
             </div>
-
-            {/* Botón Principal Login */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-11 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm hover:brightness-105 active:scale-[0.99] transition-all disabled:opacity-50"
-            >
-              {isLoading ? (
-                <span>Validando credenciales...</span>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-lg">login</span>
-                  <span>Iniciar Sesión Universitaria</span>
-                </>
-              )}
+            <button disabled={isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-sm font-bold text-white shadow-md shadow-indigo-500/20 transition hover:brightness-105 disabled:opacity-60" type="submit">
+              {isLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+              Guardar y continuar
             </button>
           </form>
         )}
 
-        {/* FORMULARIO DE REGISTRO */}
-        {authMode === 'register' && (
-          <form
-            onSubmit={handleRegisterSubmit}
-            className="bg-white rounded-2xl p-5 shadow-xs space-y-3 border border-[#eaedff]"
-          >
-            {/* Nombre Completo */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-[#131b2e]" htmlFor="reg-name">
-                Nombre y Apellidos
-              </label>
-              <div className="relative flex items-center">
-                <span className="material-symbols-outlined absolute left-3 text-[#464555] text-lg">person</span>
-                <input
-                  id="reg-name"
-                  value={regFullName}
-                  onChange={(e) => setRegFullName(e.target.value)}
-                  className="w-full h-10 pl-10 pr-3 rounded-xl bg-[#f2f3ff] text-xs text-[#131b2e] focus:bg-white focus:ring-2 focus:ring-[#3525cd]/20 border border-transparent focus:border-[#3525cd]/40 outline-none"
-                  placeholder="ej. Carlos Eduardo Ruiz"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Username */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-[#131b2e]" htmlFor="reg-username">
-                Nombre de usuario (@username)
-              </label>
-              <div className="relative flex items-center">
-                <span className="absolute left-3 text-[#3525cd] font-bold text-xs">@</span>
-                <input
-                  id="reg-username"
-                  value={regUsername}
-                  onChange={(e) => setRegUsername(e.target.value)}
-                  className="w-full h-10 pl-8 pr-3 rounded-xl bg-[#f2f3ff] text-xs text-[#131b2e] focus:bg-white focus:ring-2 focus:ring-[#3525cd]/20 border border-transparent focus:border-[#3525cd]/40 outline-none font-mono"
-                  placeholder="carlos.ruiz"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Email */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-[#131b2e]" htmlFor="reg-email">
-                Correo institucional o personal
-              </label>
-              <div className="relative flex items-center">
-                <span className="material-symbols-outlined absolute left-3 text-[#464555] text-lg">mail</span>
-                <input
-                  id="reg-email"
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
-                  className="w-full h-10 pl-10 pr-3 rounded-xl bg-[#f2f3ff] text-xs text-[#131b2e] focus:bg-white focus:ring-2 focus:ring-[#3525cd]/20 border border-transparent focus:border-[#3525cd]/40 outline-none"
-                  placeholder="usuario@universidad.edu"
-                  type="email"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Carrera y Semestre */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-[#131b2e]">Carrera</label>
-                <input
-                  value={regCareer}
-                  onChange={(e) => setRegCareer(e.target.value)}
-                  className="w-full h-9 px-3 rounded-xl bg-[#f2f3ff] text-xs text-[#131b2e] border border-transparent focus:bg-white"
-                  placeholder="Ing. de Software"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-[#131b2e]">Semestre</label>
-                <select
-                  value={regSemester}
-                  onChange={(e) => setRegSemester(e.target.value)}
-                  className="w-full h-9 px-2 rounded-xl bg-[#f2f3ff] text-xs text-[#131b2e] border border-transparent focus:bg-white"
-                >
-                  {['1er Semestre', '2do Semestre', '3er Semestre', '4to Semestre', '5to Semestre', '6to Semestre', '7mo+ Semestre'].map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Contraseña con Medidor de Fortaleza */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-[#131b2e]" htmlFor="reg-password">
-                  Contraseña segura
-                </label>
-                {regPassword && (
-                  <span className="text-[10px] font-bold text-[#464555]">
-                    Fortaleza: <strong className={passwordStrength.score >= 2 ? 'text-[#006e4b]' : 'text-red-500'}>{passwordStrength.label}</strong>
-                  </span>
-                )}
-              </div>
-              <div className="relative flex items-center">
-                <span className="material-symbols-outlined absolute left-3 text-[#464555] text-lg">lock</span>
-                <input
-                  id="reg-password"
-                  value={regPassword}
-                  onChange={(e) => setRegPassword(e.target.value)}
-                  className="w-full h-10 pl-10 pr-10 rounded-xl bg-[#f2f3ff] text-xs text-[#131b2e] focus:bg-white focus:ring-2 focus:ring-[#3525cd]/20 border border-transparent focus:border-[#3525cd]/40 outline-none"
-                  placeholder="Mínimo 8 caracteres (letras y números)"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 text-[#464555] p-1"
-                >
-                  <span className="material-symbols-outlined text-lg">
-                    {showPassword ? 'visibility_off' : 'visibility'}
-                  </span>
-                </button>
-              </div>
-
-              {/* Barra de progreso de fortaleza */}
-              {regPassword && (
-                <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden mt-1.5">
-                  <div
-                    className={`h-full transition-all duration-300 ${passwordStrength.color} ${passwordStrength.width}`}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Botón Principal Registro */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-11 rounded-xl bg-gradient-to-r from-[#3525cd] to-[#712ae2] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm hover:brightness-105 active:scale-[0.99] transition-all disabled:opacity-50 mt-2"
-            >
-              {isLoading ? (
-                <span>Creando cuenta segura...</span>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-lg">how_to_reg</span>
-                  <span>Registrar Cuenta Universitaria</span>
-                </>
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* Separador */}
-        <div className="relative flex items-center justify-center my-0.5">
-          <div className="w-full bg-[#e2e7ff] h-[1px]" />
-          <span className="absolute bg-[#faf8ff] px-3 text-[10px] font-bold text-[#777587] uppercase tracking-wider">
-            o continúa con
-          </span>
+        {errorMessage && <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</p>}
+        <p className="mt-6 text-center text-xs leading-5 text-[#858294]">Tu cuenta se protege con contraseña. No compartas tus credenciales con nadie.</p>
         </div>
-
-        {/* Botón Oficial Google OAuth 2.0 */}
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          disabled={isLoading}
-          className="btn-google w-full h-11 bg-white hover:bg-[#eaedff] transition-all rounded-xl px-4 flex items-center justify-center gap-3 shadow-xs active:scale-[0.99] border border-[#e2e7ff]"
-        >
-          <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
-            <path
-              d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17Z"
-              fill="#4285F4"
-            />
-            <path
-              d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24Z"
-              fill="#34A853"
-            />
-            <path
-              d="M5.28 14.27A7.17 7.17 0 0 1 4.9 12c0-.79.14-1.57.38-2.27V6.58H1.25A11.96 11.96 0 0 0 0 12c0 1.92.45 3.74 1.25 5.42l4.03-3.15Z"
-              fill="#FBBC05"
-            />
-            <path
-              d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z"
-              fill="#EA4335"
-            />
-          </svg>
-          <span className="text-xs text-[#131b2e] font-semibold">
-            Iniciar sesión con Google
-          </span>
-        </button>
-
-        {/* MODO INVITADO (GUEST ACCESS) - DESTACADO */}
-        <div className="p-3.5 bg-gradient-to-r from-[#e2dfff]/40 to-[#eaedff]/60 rounded-2xl border border-[#d6d0ff] flex items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-white shadow-xs flex items-center justify-center text-[#3525cd]">
-              <span className="material-symbols-outlined text-lg">visibility</span>
-            </div>
-            <div>
-              <h2 className="text-xs font-bold text-[#131b2e] leading-tight">
-                Acceso en Modo Invitado
-              </h2>
-              <p className="text-[10px] text-[#464555]">
-                Explora el campus, apuntes y feed sin registrarte
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleGuestAccess}
-            disabled={isLoading}
-            className="px-3 py-1.5 rounded-xl bg-[#3525cd] hover:bg-[#4f46e5] text-white text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0"
-            type="button"
-          >
-            Explorar
-          </button>
-        </div>
-
-        {/* Biometría / NFC Tile */}
-        <div className="bg-[#f2f3ff] rounded-xl p-3 flex items-center justify-between border border-[#e2e7ff]">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#eaddff] flex items-center justify-center text-[#712ae2]">
-              <span className="material-symbols-outlined text-xl">fingerprint</span>
-            </div>
-            <div>
-              <h3 className="text-xs font-bold text-[#131b2e]">Acceso Rápido NFC / Face ID</h3>
-              <p className="text-[10px] text-[#464555]">Credencial académica digital de prueba</p>
-            </div>
-          </div>
-          <button
-            onClick={handleBiometric}
-            disabled={isBiometricScanning}
-            className="px-3 py-1 rounded-lg text-xs font-bold bg-white text-[#3525cd] hover:bg-[#eaedff] border border-[#d6d0ff] active:scale-95 transition-all"
-            type="button"
-          >
-            {isBiometricScanning ? 'Verificando...' : biometricSuccess ? 'Listo' : 'Tocar NFC'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 };

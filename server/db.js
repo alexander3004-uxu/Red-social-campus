@@ -4,113 +4,31 @@
  * Arquitectura híbrida y tolerante a fallos:
  * - Si PostgreSQL está disponible (DATABASE_URL), ejecuta queries vía pg.Pool.
  * - Si PostgreSQL no está instalado o no responde, conmuta de forma transparente
- *   a un almacén estructurado en memoria pre-sembrado con usuarios y perfiles reales.
+ *   a un almacén temporal en memoria sin cuentas de demostración.
  */
 
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
-import dotenv from 'dotenv';
 
-// Cargar variables de entorno inmediatamente para la capa de persistencia
-dotenv.config();
-
-// Semilla con hash bcrypt precalculado (10 salt rounds) para contraseña por defecto 'campus2026!'
-const DEFAULT_PASSWORD_HASH = bcrypt.hashSync('campus2026!', 10);
-
-// ID estático para la cuenta principal del campus (Sofía Valenzuela)
-const SOFIA_USER_ID = 'e9f4c3a2-7104-4e2b-a81f-490326071001';
-const CARLOS_USER_ID = 'b1c2d3e4-5678-4901-a234-56789abcdef0';
-const ADMIN_USER_ID = 'c3d4e5f6-7890-4123-b456-789012abcdef';
+function formatTimeAgo(value) {
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (elapsedSeconds < 60) return 'Ahora';
+  if (elapsedSeconds < 3600) return `Hace ${Math.floor(elapsedSeconds / 60)} min`;
+  if (elapsedSeconds < 86400) return `Hace ${Math.floor(elapsedSeconds / 3600)} h`;
+  return `Hace ${Math.floor(elapsedSeconds / 86400)} d`;
+}
 
 /**
  * Almacén en memoria estructurado
  */
 const inMemoryStore = {
-  users: [
-    {
-      id: SOFIA_USER_ID,
-      email: 'sofia.valenzuela@ucentral.edu',
-      password_hash: DEFAULT_PASSWORD_HASH,
-      role: 'student',
-      is_verified: true,
-      is_active: true,
-      created_at: new Date('2024-02-15T08:00:00Z').toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      id: CARLOS_USER_ID,
-      email: 'carlos.mendoza@ucentral.edu',
-      password_hash: DEFAULT_PASSWORD_HASH,
-      role: 'professor',
-      is_verified: true,
-      is_active: true,
-      created_at: new Date('2023-08-10T10:00:00Z').toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      id: ADMIN_USER_ID,
-      email: 'admin@ucentral.edu',
-      password_hash: DEFAULT_PASSWORD_HASH,
-      role: 'admin',
-      is_verified: true,
-      is_active: true,
-      created_at: new Date('2023-01-01T00:00:00Z').toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-  ],
-  profiles: [
-    {
-      id: 'prof_sofia_001',
-      user_id: SOFIA_USER_ID,
-      username: 'sofia.valenzuela',
-      full_name: 'Sofía Valenzuela',
-      bio: 'Amante del código limpio, el café y los apuntes organizados ☕💻. Siempre dispuesta a ayudar con Algoritmos y Estructuras de Datos.',
-      avatar_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuABkwfwZU2h4Xj7V32v3SMsfEW4_188-UR3Plpr5gPSKKYyy3PxDdS6dvkKsupv2P9_3vKRAVgHHZMbvDlo2Wr8trHJBjAP_3HiTRAmgCuA48zYUMWWvbUZjqRZ_FxIDAFRClApQwpYwpSEN2VZq9dVD2jFNDolT0uIVdCFSCgGni-kZMcCDkvuT5HL8LYFwLR8j3e0PaHidohM5TN5NiTZvApORtmLLPNkXvcBu8q3HK0y8pr9okRq',
-      banner_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDCZNqCPpjFgTiIFbzXtuxbkltYQY6HU9ldAlVsM6EUmDkkSivKkLnUr1j2rn6dmspeWA2xMMOMCgXTyFloOVqxjbLjdNea1MJ2L9RpHr4ZkCUoPt15cm5PeS1lpOCfIsyws8xg_eZL5Tt4yN9uyW63XhF4QCYr163i_MVeLRNhQhxzDmSg_fnMQOQr-FmyB2IrZb0j-SNB2KafAkX16Ik1FCEIFO0AexW4Hl4mGZ5DKLYTjcIFafen',
-      university: 'Universidad Central (Sede Principal)',
-      faculty: 'Facultad de Ingeniería',
-      career: 'Ingeniería de Software',
-      semester: '6to Semestre',
-      student_id: 'UC-2022-84912',
-      reputation: 4.9,
-      social_links: [
-        { platform: 'github', url: 'https://github.com/sofia-valenzuela' },
-        { platform: 'linkedin', url: 'https://linkedin.com/in/sofia-valenzuela' },
-      ],
-      created_at: new Date('2024-02-15T08:00:00Z').toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      id: 'prof_carlos_002',
-      user_id: CARLOS_USER_ID,
-      username: 'carlos.mendoza',
-      full_name: 'Prof. Carlos Mendoza',
-      bio: 'Docente titular de Algoritmos y Estructuras de Datos. Horarios de consulta: Martes y Jueves 14:00 - 16:00.',
-      avatar_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAMPCtTazJmP77sH_t1dVYaF7l3m3NGBSAJcAMUV_p1TOTfEsYkWaEDtdEHGFnY1ugXgjBrrXuUKzm3O7Q74ZKk4EDYiXjPXjijzXmd4URhNl6P18KWBVoi7rnf26lKcGO2Ov03reyFRp3JIYJT67svx1ndoZgiGzwFZu2kpPTx7BvZtoXigNOr61gV2Dr7cyOxh7YNECV_b7rCBX21EzWPbz7X8ZfavbT9B_37TV9CvMgRxPPJCe_T',
-      banner_url: '',
-      university: 'Universidad Central (Sede Principal)',
-      faculty: 'Facultad de Ingeniería',
-      career: 'Ciencias de la Computación',
-      semester: 'Docente Titular',
-      student_id: 'DOC-88319',
-      reputation: 5.0,
-      social_links: [],
-      created_at: new Date('2023-08-10T10:00:00Z').toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-  ],
-  auth_providers: [
-    {
-      id: 'prov_sofia_google',
-      user_id: SOFIA_USER_ID,
-      provider: 'google',
-      provider_user_id: 'google_sub_sofia_1029384756',
-      email: 'sofia.valenzuela@ucentral.edu',
-      metadata: { name: 'Sofía Valenzuela' },
-      created_at: new Date().toISOString(),
-    },
-  ],
+  users: [],
+  profiles: [],
+  auth_providers: [],
   user_sessions: [],
+  user_follows: [],
+  friend_requests: [],
+  campus_posts: [],
+  campus_post_likes: [],
 };
 
 // Conexión a Supabase PostgreSQL con fallback automático a memoria local (MemDB)
@@ -130,35 +48,30 @@ function isConfiguredDatabaseUrl(url) {
 }
 
 async function initDatabase() {
-  const databaseUrl = process.env.DATABASE_URL;
-  // Habilitado por defecto si existe DATABASE_URL válida a menos que ENABLE_POSTGRES sea 'false'
-  const isEnabled = process.env.ENABLE_POSTGRES !== 'false';
+  const isPostgresEnabled = process.env.ENABLE_POSTGRES === 'true' || (Boolean(process.env.DATABASE_URL) && process.env.ENABLE_POSTGRES !== 'false');
 
-  if (isConfiguredDatabaseUrl(databaseUrl) && isEnabled) {
+  if (process.env.DATABASE_URL && isPostgresEnabled) {
     try {
       const { Pool } = await import('pg');
-
-      // Configuración de conexión optimizada para Supabase (Transaction Pooler o Session Pooler)
-      // SSL con rejectUnauthorized: false es requerido para conexiones seguras en Supabase
-      const isLocal = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
-      const ssl = isLocal ? false : { rejectUnauthorized: false };
+      const needsSsl = Boolean(
+        process.env.DATABASE_URL.includes('supabase') ||
+        process.env.DATABASE_URL.includes('sslmode=require') ||
+        process.env.DATABASE_URL.includes('.pooler.supabase.com') ||
+        process.env.VERCEL ||
+        process.env.NODE_ENV === 'production'
+      );
 
       pgPool = new Pool({
-        connectionString: databaseUrl,
-        ssl,
-        max: 20,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
+        connectionString: process.env.DATABASE_URL,
+        ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+        max: process.env.VERCEL ? 1 : 20,
+        idleTimeoutMillis: process.env.VERCEL ? 10000 : 30000,
+        connectionTimeoutMillis: 10000,
       });
 
-      // Manejador de eventos de error en el pool para evitar caídas del proceso Express
-      pgPool.on('error', (err) => {
-        console.warn('[Database] Error inesperado en el pool de conexiones PostgreSQL:', err.message);
-      });
-
-      // Smoke Test: consulta de verificación (SELECT NOW();)
-      await pgPool.query('SELECT NOW()');
-      console.log('[Database] Conectado exitosamente a Supabase PostgreSQL');
+      // Probar conexión
+      const res = await pgPool.query('SELECT NOW()');
+      console.log(`[DB] Conectado exitosamente a PostgreSQL (${res.rows[0].now})`);
       usePostgres = true;
     } catch (err) {
       console.warn(`[Database] PostgreSQL / Supabase no disponible (${err.message}). Utilizando persistencia en memoria.`);
@@ -167,6 +80,7 @@ async function initDatabase() {
       }
       pgPool = null;
       usePostgres = false;
+      // No lanzar excepción no controlada en Vercel para evitar FUNCTION_INVOCATION_FAILED
     }
   } else {
     console.log('[Database] Operando con Almacén Estructurado en Memoria (Optimizado para desarrollo rápido y pruebas).');
@@ -174,23 +88,12 @@ async function initDatabase() {
   }
 }
 
-// Inicializar de forma asíncrona al cargar el módulo
-initDatabase().catch((err) => console.error('[Database] Error de inicialización:', err));
-
-/**
- * Ejecutor seguro de consultas en PostgreSQL / Supabase.
- * Si la consulta falla por red, desconexión del pool o error SQL,
- * registra la advertencia y conmuta fluidamente al almacén en memoria sin botar el servidor.
- */
-async function safePgQuery(queryFn, methodName = 'query') {
-  if (!usePostgres || !pgPool) return { executed: false };
-  try {
-    const result = await queryFn(pgPool);
-    return { executed: true, result };
-  } catch (err) {
-    console.warn(`[Database] Error en PostgreSQL / Supabase (${methodName}): ${err.message}. Conmutando a memoria.`);
-    return { executed: false, error: err };
-  }
+// Inicializar la base de datos de forma segura sin interrumpir la carga del módulo
+try {
+  await initDatabase();
+} catch (err) {
+  console.error('[DB] Error de inicialización:', err.message);
+  usePostgres = false;
 }
 
 /**
@@ -440,36 +343,33 @@ export const db = {
       user_id: profileData.user_id,
       username: cleanUsername,
       full_name: profileData.full_name || 'Estudiante Campus',
-      bio: profileData.bio || '',
-      avatar_url: profileData.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-      banner_url: profileData.banner_url || '',
-      university: profileData.university || 'Universidad Central (Sede Principal)',
-      faculty: profileData.faculty || 'Facultad de Ingeniería',
-      career: profileData.career || 'Ingeniería de Software',
-      semester: profileData.semester || '1er Semestre',
+      bio: profileData.bio ?? '',
+      avatar_url: profileData.avatar_url ?? '',
+      banner_url: profileData.banner_url ?? '',
+      university: profileData.university ?? '',
+      faculty: profileData.faculty ?? '',
+      career: profileData.career ?? '',
+      semester: profileData.semester ?? '',
       student_id: profileData.student_id || `UC-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
       reputation: 5.0,
       social_links: profileData.social_links || [],
+      profile_completed: profileData.profile_completed ?? false,
       created_at: now,
       updated_at: now,
     };
 
-    const pg = await safePgQuery(
-      (pool) =>
-        pool.query(
-          `INSERT INTO profiles (id, user_id, username, full_name, bio, avatar_url, banner_url, university, faculty, career, semester, student_id, reputation, social_links, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15) RETURNING *`,
-          [
-            record.id, record.user_id, record.username, record.full_name, record.bio,
-            record.avatar_url, record.banner_url, record.university, record.faculty,
-            record.career, record.semester, record.student_id, record.reputation,
-            JSON.stringify(record.social_links), now,
-          ]
-        ),
-      'createProfile'
-    );
-    if (pg.executed) {
-      return pg.result.rows[0];
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `INSERT INTO profiles (id, user_id, username, full_name, bio, avatar_url, banner_url, university, faculty, career, semester, student_id, reputation, social_links, profile_completed, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16) RETURNING *`,
+        [
+          record.id, record.user_id, record.username, record.full_name, record.bio,
+          record.avatar_url, record.banner_url, record.university, record.faculty,
+          record.career, record.semester, record.student_id, record.reputation,
+          JSON.stringify(record.social_links), record.profile_completed, now,
+        ]
+      );
+      return res.rows[0];
     }
 
     inMemoryStore.profiles.push(record);
@@ -482,19 +382,26 @@ export const db = {
   async updateProfile(userId, patchData) {
     const now = new Date().toISOString();
 
-    const allowedFields = [
-      'username', 'full_name', 'bio', 'avatar_url', 'banner_url',
-      'university', 'faculty', 'career', 'semester', 'student_id', 'social_links'
-    ];
-    const updates = [];
-    const values = [];
-    let idx = 1;
+    if (usePostgres && pgPool) {
+      // Construcción dinámica de UPDATE
+      const allowedFields = [
+        'username', 'full_name', 'bio', 'avatar_url', 'banner_url',
+        'university', 'faculty', 'career', 'semester', 'student_id', 'social_links', 'profile_completed'
+      ];
+      const updates = [];
+      const values = [];
+      let idx = 1;
 
-    for (const field of allowedFields) {
-      if (patchData[field] !== undefined) {
-        updates.push(`${field} = $${idx}`);
-        values.push(field === 'social_links' ? JSON.stringify(patchData[field]) : patchData[field]);
-        idx++;
+      for (const field of allowedFields) {
+        if (patchData[field] !== undefined) {
+          updates.push(`${field} = $${idx}`);
+          values.push(field === 'social_links' ? JSON.stringify(patchData[field]) : patchData[field]);
+          idx++;
+        }
+      }
+
+      if (updates.length === 0) {
+        return this.findProfileByUserId(userId);
       }
     }
 
@@ -530,11 +437,393 @@ export const db = {
       ...(patchData.semester !== undefined && { semester: patchData.semester }),
       ...(patchData.student_id !== undefined && { student_id: patchData.student_id }),
       ...(patchData.social_links !== undefined && { social_links: patchData.social_links }),
+      ...(patchData.profile_completed !== undefined && { profile_completed: patchData.profile_completed }),
       updated_at: now,
     };
 
     inMemoryStore.profiles[profileIndex] = updated;
     return { ...updated };
+  },
+
+  async searchPeople(query, currentUserId) {
+    const term = String(query || '').trim().toLowerCase();
+
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `SELECT p.user_id AS id, p.username, p.full_name, p.avatar_url, p.university, p.career, p.faculty,
+                EXISTS (SELECT 1 FROM user_follows f WHERE f.follower_id = $1 AND f.followed_id = p.user_id) AS is_following,
+                fr.id AS request_id,
+                CASE
+                  WHEN fr.status = 'accepted' THEN 'friends'
+                  WHEN fr.status = 'pending' AND fr.sender_id = $1 THEN 'pending_sent'
+                  WHEN fr.status = 'pending' AND fr.receiver_id = $1 THEN 'pending_received'
+                  ELSE 'none'
+                END AS friendship_status
+         FROM profiles p
+         JOIN users u ON u.id = p.user_id
+         LEFT JOIN friend_requests fr ON (
+           (fr.sender_id = $1 AND fr.receiver_id = p.user_id) OR
+           (fr.receiver_id = $1 AND fr.sender_id = p.user_id)
+         ) AND fr.status IN ('pending', 'accepted')
+         WHERE p.user_id <> $1 AND u.is_active = TRUE AND u.role <> 'guest'
+           AND ($2 = '' OR p.username ILIKE '%' || $2 || '%' OR p.full_name ILIKE '%' || $2 || '%'
+                OR p.university ILIKE '%' || $2 || '%' OR p.career ILIKE '%' || $2 || '%')
+         ORDER BY p.full_name ASC LIMIT 40`,
+        [currentUserId, term]
+      );
+      return res.rows;
+    }
+
+    return inMemoryStore.profiles
+      .filter((profile) => profile.user_id !== currentUserId)
+      .filter((profile) => {
+        if (!term) return true;
+        return [profile.username, profile.full_name, profile.university, profile.career]
+          .some((value) => String(value || '').toLowerCase().includes(term));
+      })
+      .slice(0, 40)
+      .map((profile) => {
+        const fr = (inMemoryStore.friend_requests || []).find(
+          (r) =>
+            ((r.sender_id === currentUserId && r.receiver_id === profile.user_id) ||
+             (r.receiver_id === currentUserId && r.sender_id === profile.user_id)) &&
+            ['pending', 'accepted'].includes(r.status)
+        );
+
+        let friendship_status = 'none';
+        if (fr) {
+          if (fr.status === 'accepted') friendship_status = 'friends';
+          else if (fr.sender_id === currentUserId) friendship_status = 'pending_sent';
+          else friendship_status = 'pending_received';
+        }
+
+        return {
+          id: profile.user_id,
+          username: profile.username,
+          full_name: profile.full_name,
+          avatar_url: profile.avatar_url,
+          university: profile.university,
+          career: profile.career,
+          faculty: profile.faculty,
+          is_following: inMemoryStore.user_follows.some((edge) => edge.follower_id === currentUserId && edge.followed_id === profile.user_id),
+          friendship_status,
+          request_id: fr?.id,
+        };
+      });
+  },
+
+  async sendFriendRequest(senderId, receiverId) {
+    if (!senderId || !receiverId || senderId === receiverId) {
+      const error = new Error('No puedes enviarte una solicitud a ti mismo.');
+      error.code = 'INVALID_REQUEST';
+      throw error;
+    }
+
+    const now = new Date().toISOString();
+
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `INSERT INTO friend_requests (sender_id, receiver_id, status, updated_at)
+         VALUES ($1, $2, 'pending', $3)
+         ON CONFLICT (sender_id, receiver_id)
+         DO UPDATE SET status = 'pending', updated_at = $3
+         RETURNING *`,
+        [senderId, receiverId, now]
+      );
+      return res.rows[0];
+    }
+
+    const existing = inMemoryStore.friend_requests.find(
+      (r) => r.sender_id === senderId && r.receiver_id === receiverId
+    );
+
+    if (existing) {
+      existing.status = 'pending';
+      existing.updated_at = now;
+      return { ...existing };
+    }
+
+    const record = {
+      id: crypto.randomUUID(),
+      sender_id: senderId,
+      receiver_id: receiverId,
+      status: 'pending',
+      created_at: now,
+      updated_at: now,
+    };
+    inMemoryStore.friend_requests.push(record);
+    return { ...record };
+  },
+
+  async acceptFriendRequest(requestIdOrSenderId, receiverId) {
+    const now = new Date().toISOString();
+
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `UPDATE friend_requests
+         SET status = 'accepted', updated_at = $1
+         WHERE (id::text = $2 OR (sender_id::text = $2 AND receiver_id = $3))
+         RETURNING *`,
+        [now, requestIdOrSenderId, receiverId]
+      );
+      const row = res.rows[0];
+      if (row) {
+        // Establecer follow mutuo
+        await pgPool.query(
+          `INSERT INTO user_follows (follower_id, followed_id) VALUES ($1, $2), ($2, $1)
+           ON CONFLICT DO NOTHING`,
+          [row.sender_id, row.receiver_id]
+        );
+      }
+      return row || null;
+    }
+
+    const req = inMemoryStore.friend_requests.find(
+      (r) =>
+        (r.id === requestIdOrSenderId || (r.sender_id === requestIdOrSenderId && r.receiver_id === receiverId)) &&
+        r.status === 'pending'
+    );
+    if (!req) return null;
+    req.status = 'accepted';
+    req.updated_at = now;
+
+    // Follow mutuo
+    if (!inMemoryStore.user_follows.some((e) => e.follower_id === req.sender_id && e.followed_id === req.receiver_id)) {
+      inMemoryStore.user_follows.push({ follower_id: req.sender_id, followed_id: req.receiver_id, created_at: now });
+    }
+    if (!inMemoryStore.user_follows.some((e) => e.follower_id === req.receiver_id && e.followed_id === req.sender_id)) {
+      inMemoryStore.user_follows.push({ follower_id: req.receiver_id, followed_id: req.sender_id, created_at: now });
+    }
+    return { ...req };
+  },
+
+  async rejectFriendRequest(requestIdOrSenderId, receiverId) {
+    const now = new Date().toISOString();
+
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `UPDATE friend_requests
+         SET status = 'rejected', updated_at = $1
+         WHERE (id::text = $2 OR (sender_id::text = $2 AND receiver_id = $3))
+         RETURNING *`,
+        [now, requestIdOrSenderId, receiverId]
+      );
+      return res.rows[0] || null;
+    }
+
+    const req = inMemoryStore.friend_requests.find(
+      (r) => r.id === requestIdOrSenderId || (r.sender_id === requestIdOrSenderId && r.receiver_id === receiverId)
+    );
+    if (!req) return null;
+    req.status = 'rejected';
+    req.updated_at = now;
+    return { ...req };
+  },
+
+  async cancelFriendRequest(senderId, receiverId) {
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `DELETE FROM friend_requests
+         WHERE sender_id = $1 AND receiver_id = $2 AND status = 'pending'
+         RETURNING id`,
+        [senderId, receiverId]
+      );
+      return res.rowCount > 0;
+    }
+
+    const before = inMemoryStore.friend_requests.length;
+    inMemoryStore.friend_requests = inMemoryStore.friend_requests.filter(
+      (r) => !(r.sender_id === senderId && r.receiver_id === receiverId && r.status === 'pending')
+    );
+    return inMemoryStore.friend_requests.length < before;
+  },
+
+  async removeFriend(userId1, userId2) {
+    if (usePostgres && pgPool) {
+      await pgPool.query(
+        `DELETE FROM friend_requests
+         WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1)`,
+        [userId1, userId2]
+      );
+      await pgPool.query(
+        `DELETE FROM user_follows
+         WHERE (follower_id = $1 AND followed_id = $2) OR (follower_id = $2 AND followed_id = $1)`,
+        [userId1, userId2]
+      );
+      return true;
+    }
+
+    inMemoryStore.friend_requests = inMemoryStore.friend_requests.filter(
+      (r) => !((r.sender_id === userId1 && r.receiver_id === userId2) || (r.sender_id === userId2 && r.receiver_id === userId1))
+    );
+    inMemoryStore.user_follows = inMemoryStore.user_follows.filter(
+      (e) => !((e.follower_id === userId1 && e.followed_id === userId2) || (e.follower_id === userId2 && e.followed_id === userId1))
+    );
+    return true;
+  },
+
+  async followPerson(followerId, followedId) {
+    if (!followerId || !followedId || followerId === followedId) {
+      const error = new Error('No puedes agregarte a ti mismo.');
+      error.code = 'INVALID_FOLLOW';
+      throw error;
+    }
+
+    const target = await this.findProfileByUserId(followedId);
+    if (!target) {
+      const error = new Error('No encontramos esa cuenta.');
+      error.code = 'PERSON_NOT_FOUND';
+      throw error;
+    }
+
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `INSERT INTO user_follows (follower_id, followed_id) VALUES ($1, $2)
+         ON CONFLICT (follower_id, followed_id) DO NOTHING RETURNING follower_id`,
+        [followerId, followedId]
+      );
+      return { following: true, created: res.rowCount > 0 };
+    }
+
+    const existing = inMemoryStore.user_follows.some((edge) => edge.follower_id === followerId && edge.followed_id === followedId);
+    if (!existing) inMemoryStore.user_follows.push({ follower_id: followerId, followed_id: followedId, created_at: new Date().toISOString() });
+    return { following: true, created: !existing };
+  },
+
+  async unfollowPerson(followerId, followedId) {
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        'DELETE FROM user_follows WHERE follower_id = $1 AND followed_id = $2 RETURNING follower_id',
+        [followerId, followedId]
+      );
+      return { following: false, deleted: res.rowCount > 0 };
+    }
+
+    const before = inMemoryStore.user_follows.length;
+    inMemoryStore.user_follows = inMemoryStore.user_follows.filter(
+      (edge) => !(edge.follower_id === followerId && edge.followed_id === followedId)
+    );
+    return { following: false, deleted: inMemoryStore.user_follows.length < before };
+  },
+
+  async listCampusPosts(currentUserId) {
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        `SELECT p.id, p.user_id, p.post_data, p.created_at, pr.full_name, pr.username, pr.avatar_url, pr.career,
+                (SELECT COUNT(*)::int FROM campus_post_likes l WHERE l.post_id = p.id) AS likes_count,
+                EXISTS (SELECT 1 FROM campus_post_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS is_liked
+         FROM campus_posts p
+         JOIN profiles pr ON pr.user_id = p.user_id
+         WHERE (p.user_id = $1 OR EXISTS (
+             SELECT 1 FROM user_follows f
+             WHERE f.follower_id = $1 AND f.followed_id = p.user_id
+           ))
+         ORDER BY p.created_at DESC LIMIT 100`,
+        [currentUserId]
+      );
+      return res.rows.map((row) => ({
+        ...row.post_data,
+        id: row.id,
+        authorName: row.full_name,
+        authorAvatar: row.avatar_url || '',
+        authorTag: row.career || 'CampusLink',
+        authorTagColor: 'bg-[#e2dfff] text-[#3323cc]',
+        timeAgo: formatTimeAgo(row.created_at),
+        user_id: row.user_id,
+        likes: Number(row.likes_count) || 0,
+        isLiked: Boolean(row.is_liked),
+        comments: Number(row.post_data.comments) || 0,
+      }));
+    }
+
+    return inMemoryStore.campus_posts
+      .filter((post) => post.user_id === currentUserId || inMemoryStore.user_follows.some(
+        (edge) => edge.follower_id === currentUserId && edge.followed_id === post.user_id
+      ))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 100)
+      .map((post) => {
+        const profile = inMemoryStore.profiles.find((item) => item.user_id === post.user_id);
+        return {
+          ...post.post_data,
+          id: post.id,
+          authorName: profile.full_name,
+          authorAvatar: profile.avatar_url || '',
+          authorTag: profile.career || 'CampusLink',
+          authorTagColor: 'bg-[#e2dfff] text-[#3323cc]',
+          timeAgo: formatTimeAgo(post.created_at),
+          user_id: post.user_id,
+          likes: inMemoryStore.campus_post_likes.filter((like) => like.post_id === post.id).length,
+          isLiked: inMemoryStore.campus_post_likes.some((like) => like.post_id === post.id && like.user_id === currentUserId),
+        };
+      });
+  },
+
+  async setCampusPostLike(userId, postId, liked) {
+    if (usePostgres && pgPool) {
+      const post = await pgPool.query('SELECT 1 FROM campus_posts WHERE id = $1', [postId]);
+      if (!post.rowCount) return null;
+      if (liked) {
+        await pgPool.query(
+          'INSERT INTO campus_post_likes (post_id, user_id) SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM campus_posts WHERE id = $1) ON CONFLICT (post_id, user_id) DO NOTHING',
+          [postId, userId]
+        );
+      } else {
+        await pgPool.query('DELETE FROM campus_post_likes WHERE post_id = $1 AND user_id = $2', [postId, userId]);
+      }
+      const res = await pgPool.query(
+        'SELECT COUNT(*)::int AS likes_count FROM campus_post_likes WHERE post_id = $1',
+        [postId]
+      );
+      return Number(res.rows[0]?.likes_count) || 0;
+    }
+
+    if (!inMemoryStore.campus_posts.some((post) => post.id === postId)) return null;
+    const index = inMemoryStore.campus_post_likes.findIndex((like) => like.post_id === postId && like.user_id === userId);
+    if (liked && index < 0) inMemoryStore.campus_post_likes.push({ post_id: postId, user_id: userId });
+    if (!liked && index >= 0) inMemoryStore.campus_post_likes.splice(index, 1);
+    return inMemoryStore.campus_post_likes.filter((like) => like.post_id === postId).length;
+  },
+
+  async createCampusPost(userId, postData) {
+    const profile = await this.findProfileByUserId(userId);
+    if (!profile) {
+      const error = new Error('Cuenta de usuario no encontrada.');
+      error.code = 'PROFILE_NOT_FOUND';
+      throw error;
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    if (usePostgres && pgPool) {
+      const res = await pgPool.query(
+        'INSERT INTO campus_posts (id, user_id, post_data, created_at) VALUES ($1, $2, $3, $4) RETURNING id, created_at',
+        [id, userId, JSON.stringify(postData), now]
+      );
+      return {
+        ...postData,
+        id: res.rows[0].id,
+        authorName: profile.full_name,
+        authorAvatar: profile.avatar_url || '',
+        authorTag: profile.career || 'CampusLink',
+        authorTagColor: 'bg-[#e2dfff] text-[#3323cc]',
+        timeAgo: formatTimeAgo(res.rows[0].created_at),
+        user_id: userId,
+      };
+    }
+
+    const record = { id, user_id: userId, post_data: postData, created_at: now };
+    inMemoryStore.campus_posts.push(record);
+    return {
+      ...postData,
+      id,
+      authorName: profile.full_name,
+      authorAvatar: profile.avatar_url || '',
+      authorTag: profile.career || 'CampusLink',
+      authorTagColor: 'bg-[#e2dfff] text-[#3323cc]',
+      timeAgo: formatTimeAgo(now),
+      user_id: userId,
+    };
   },
 
   /**

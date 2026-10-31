@@ -1,13 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ScreenTab, Post, Story, MarketItem, LiveRoom, CommunityGroup, ChatThread } from './types';
-import {
-  INITIAL_POSTS,
-  STORIES,
-  INITIAL_MARKET_ITEMS,
-  LIVE_ROOMS,
-  COMMUNITY_GROUPS,
-  INITIAL_CHATS,
-} from './data/mockData';
+
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -34,7 +27,7 @@ import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { socketClient } from './services/socketClient';
 import { supabaseDataService } from './services/supabaseDataService';
-import { supabase } from './supabaseClient';
+import { apiClient } from './services/apiClient';
 
 function CampusApp() {
   const {
@@ -114,21 +107,31 @@ function CampusApp() {
   }, [currentTab]);
 
   // App Data State
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
-  const [stories, setStories] = useState<Story[]>(STORIES);
-  const [marketItems, setMarketItems] = useState<MarketItem[]>(INITIAL_MARKET_ITEMS);
-  const [groups, setGroups] = useState<CommunityGroup[]>(COMMUNITY_GROUPS);
-  const [liveRooms, setLiveRooms] = useState<LiveRoom[]>(LIVE_ROOMS);
-  const [chats, setChats] = useState<ChatThread[]>(INITIAL_CHATS);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [marketItems, setMarketItems] = useState<MarketItem[]>([]);
+  const [groups, setGroups] = useState<CommunityGroup[]>([]);
+  const [liveRooms, setLiveRooms] = useState<LiveRoom[]>([]);
+  const [chats, setChats] = useState<ChatThread[]>([]);
 
   // Sincronización en tiempo real con Supabase
   useEffect(() => {
     let active = true;
 
+    // Carga inicial de publicaciones
+    const loadPosts = async () => {
+      if (!user?.id) return;
+      try {
+        const result = await apiClient.social.fetchPosts();
+        if (active && result?.success) setPosts(Array.isArray(result.posts) ? result.posts : []);
+      } catch (e) {
+        console.warn('[Social] No se pudieron cargar las publicaciones:', e);
+      }
+    };
+
     async function loadData() {
       try {
-        const [dbPosts, dbStories, dbMarket, dbGroups, dbChats] = await Promise.all([
-          supabaseDataService.fetchPosts(user?.id),
+        const [dbStories, dbMarket, dbGroups, dbChats] = await Promise.all([
           supabaseDataService.fetchStories(),
           supabaseDataService.fetchMarketItems(user?.id),
           supabaseDataService.fetchGroups(user?.id),
@@ -136,7 +139,6 @@ function CampusApp() {
         ]);
 
         if (active) {
-          if (dbPosts?.length) setPosts(dbPosts);
           if (dbStories?.length) setStories(dbStories);
           if (dbMarket?.length) setMarketItems(dbMarket);
           if (dbGroups?.length) setGroups(dbGroups);
@@ -148,14 +150,36 @@ function CampusApp() {
     }
 
     loadData();
+    loadPosts();
 
-    // Suscripciones Realtime
+    // =========================================================================
+    // SUSCRIPCIÓN REALTIME PARA PUBLICACIONES (INSERT / UPDATE / DELETE)
+    // =========================================================================
     const unsubPosts = supabaseDataService.subscribeToPosts(
-      (newPost) => setPosts((prev) => prev.some((p) => p.id === newPost.id) ? prev : [newPost, ...prev]),
-      (updPost) => setPosts((prev) => prev.map((p) => p.id === updPost.id ? { ...p, ...updPost } : p)),
-      (delId) => setPosts((prev) => prev.filter((p) => p.id !== delId))
+      // INSERT: nueva publicación aparece al instante en el feed
+      (newPost) => {
+        if (!active) return;
+        setPosts((prev) => prev.some((p) => p.id === newPost.id) ? prev : [newPost, ...prev]);
+      },
+      // UPDATE: likes, comentarios, encuestas, eventos se reflejan en tiempo real
+      (updatedPost) => {
+        if (!active) return;
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === updatedPost.id
+              ? { ...p, ...updatedPost, isLiked: p.isLiked, isSaved: p.isSaved }
+              : p
+          )
+        );
+      },
+      // DELETE: publicación eliminada desaparece del feed automáticamente
+      (deletedId) => {
+        if (!active) return;
+        setPosts((prev) => prev.filter((p) => p.id !== deletedId));
+      }
     );
 
+    // Suscripciones Realtime para los demás módulos respaldados por Supabase.
     const unsubStories = supabaseDataService.subscribeToStories(
       (newStory) => setStories((prev) => prev.some((s) => s.id === newStory.id) ? prev : [newStory, ...prev])
     );
@@ -259,23 +283,31 @@ function CampusApp() {
   // Interacciones: Feed protegidas con guard de invitado
   const handleToggleLike = (postId: string) => {
     requireAuthAction(() => {
-      let nextLiked = false;
-      let nextLikes = 0;
+      const currentPost = posts.find((post) => post.id === postId);
+      if (!currentPost) return;
+      const nextLiked = !currentPost.isLiked;
       setPosts((prev) =>
         prev.map((p) => {
           if (p.id === postId) {
-            nextLiked = !p.isLiked;
-            nextLikes = nextLiked ? p.likes + 1 : p.likes - 1;
             return {
               ...p,
               isLiked: nextLiked,
-              likes: nextLikes,
+              likes: Math.max(0, p.likes + (nextLiked ? 1 : -1)),
             };
           }
           return p;
         })
       );
-      supabaseDataService.toggleLikePost(postId, user?.id || 'guest', nextLiked, nextLikes);
+      void apiClient.social.setPostLike(postId, nextLiked)
+        .then((result) => {
+          if (!result?.success) throw new Error('No se pudo guardar el me gusta.');
+          setPosts((prev) => prev.map((post) => post.id === postId
+            ? { ...post, isLiked: Boolean(result.isLiked), likes: Number(result.likes) || 0 }
+            : post));
+        })
+        .catch(() => setPosts((prev) => prev.map((post) => post.id === postId
+          ? { ...post, isLiked: currentPost.isLiked, likes: currentPost.likes }
+          : post)));
     }, 'dar me gusta a publicaciones');
   };
 
@@ -515,26 +547,19 @@ function CampusApp() {
       )}
 
       {/* Enrutamiento de Pantallas */}
-      {currentTab === 'login' || !isAuthenticated ? (
+      {currentTab === 'login' || !isAuthenticated || !profile?.profile_completed ? (
         <LoginScreen
-          onLoginSuccess={() => {
+          onLoginSuccess={(university) => {
+            const campus = university || profile?.university || selectedCampus;
+            setSelectedCampus(campus);
             try {
-              localStorage.setItem('campuslink_user_university', selectedCampus);
+              localStorage.setItem('campuslink_user_university', campus);
               localStorage.setItem('campuslink_university_confirmed', 'true');
             } catch (e) {
               console.warn(e);
             }
             setShowUniversitySelectModal(false);
             setCurrentTab('feed');
-          }}
-          selectedCampus={selectedCampus}
-          onSelectCampus={(camp) => {
-            setSelectedCampus(camp);
-            try {
-              localStorage.setItem('campuslink_user_university', camp);
-            } catch (e) {
-              console.warn(e);
-            }
           }}
         />
       ) : (
@@ -594,6 +619,7 @@ function CampusApp() {
                   onOpenCreatePost={(type) =>
                     requireAuthAction(() => setCreatePostModal({ isOpen: true, type }), 'publicar en el feed')
                   }
+                  onOpenSearch={() => setIsSearchOpen(true)}
                 />
               )}
 
@@ -672,6 +698,8 @@ function CampusApp() {
             currentTab={currentTab}
             onNavigate={setCurrentTab}
             unreadMessagesCount={chats.filter((c) => c.unreadCount).length}
+            userAvatar={profile?.avatar_url}
+            userName={profile?.full_name}
           />
         </div>
       )}
@@ -715,11 +743,15 @@ function CampusApp() {
         isOpen={createPostModal.isOpen}
         initialType={createPostModal.type}
         onClose={() => setCreatePostModal({ isOpen: false })}
-        onAddPost={(newPost) => {
-          setPosts([newPost, ...posts]);
-          supabaseDataService.createPost(newPost, user?.id);
-          showToast('Publicación compartida con el campus');
+        onAddPost={async (newPost) => {
+          const result = await apiClient.social.createPost(newPost);
+          if (!result?.success || !result.post) throw new Error(result?.message || 'No se pudo guardar la publicación.');
+          setPosts((current) => [result.post, ...current.filter((post) => post.id !== result.post.id)]);
+          showToast('Publicación compartida con la comunidad');
         }}
+        authorName={profile?.full_name || user?.email || 'Mi cuenta'}
+        authorAvatar={profile?.avatar_url}
+        authorTag={profile?.career}
       />
 
       <SellModal
@@ -754,6 +786,7 @@ function CampusApp() {
       <NotificationsModal
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
+        onOpenSearch={() => setIsSearchOpen(true)}
       />
 
       {/* One-time University Onboarding Modal */}

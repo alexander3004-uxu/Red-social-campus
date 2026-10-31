@@ -1,6 +1,6 @@
 /**
  * server/routes/auth.routes.js
- * Enrutador de Autenticación, Registro, Google OAuth, Modo Invitado y Sesiones.
+ * Enrutador de autenticación por correo, registro, modo invitado y sesiones.
  */
 
 import { Router } from 'express';
@@ -15,9 +15,6 @@ router.post('/register', validateRegister, authController.register);
 
 // 2. Inicio de sesión tradicional (Email + Password)
 router.post('/login', validateLogin, authController.login);
-
-// 3. Autenticación con Google Identity Services (Google OAuth 2.0)
-router.post('/google', authController.googleAuth);
 
 // 4. Acceso temporal en Modo Invitado (Solo Lectura)
 router.post('/guest', authController.guestLogin);

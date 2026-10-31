@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface PdfViewerModalProps {
   isOpen: boolean;
@@ -13,6 +13,8 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
   title,
   content,
 }) => {
+  const [zoom, setZoom] = useState(100);
+
   if (!isOpen) return null;
 
   const defaultContent = `UNIVERSIDAD CENTRAL • FACULTAD DE MEDICINA Y CIENCIAS
@@ -62,8 +64,7 @@ RESUMEN EJECUTIVO & ESQUEMAS:
             </button>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"
-            >
+              className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20">
               <span className="material-symbols-outlined text-[18px]">close</span>
             </button>
           </div>
@@ -77,11 +78,17 @@ RESUMEN EJECUTIVO & ESQUEMAS:
             <span className="text-[11px] text-[#006e4b] font-bold">100% Legible</span>
           </div>
           <div className="flex items-center gap-2">
-            <button className="p-1 hover:text-[#131b2e]">
+            <button
+              onClick={() => setZoom((z) => Math.max(50, z - 10))}
+              disabled={zoom <= 50}
+              className="p-1 hover:text-[#131b2e] disabled:opacity-30">
               <span className="material-symbols-outlined text-[18px]">zoom_out</span>
             </button>
-            <span className="text-[11px] font-mono">100%</span>
-            <button className="p-1 hover:text-[#131b2e]">
+            <span className="text-[11px] font-mono">{zoom}%</span>
+            <button
+              onClick={() => setZoom((z) => Math.min(150, z + 10))}
+              disabled={zoom >= 150}
+              className="p-1 hover:text-[#131b2e] disabled:opacity-30">
               <span className="material-symbols-outlined text-[18px]">zoom_in</span>
             </button>
           </div>
@@ -89,7 +96,9 @@ RESUMEN EJECUTIVO & ESQUEMAS:
 
         {/* Content Viewer Body */}
         <div className="flex-1 overflow-y-auto p-5 font-sans bg-[#faf8ff]">
-          <div className="bg-white p-6 rounded-2xl shadow-xs border border-[#eaedff] text-[#131b2e] leading-relaxed text-xs whitespace-pre-line font-mono">
+          <div
+            style={{ fontSize: `${zoom}%` }}
+            className="bg-white p-6 rounded-2xl shadow-xs border border-[#eaedff] text-[#131b2e] leading-relaxed whitespace-pre-line font-mono">
             {content || defaultContent}
           </div>
         </div>
